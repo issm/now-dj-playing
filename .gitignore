@@ -22,3 +22,6 @@ target/
 
 # Tauri
 apps/viewer/src-tauri/gen/
+
+# Kiro
+.kiro/settings/mcp.json
