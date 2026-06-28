@@ -1,0 +1,24 @@
+{
+    "title": "Ready",
+    "description": "ファイル同期完了を示す sentinel / マニフェスト",
+    "type": "object",
+    "required": [
+        "updated_at",
+        "files"
+    ],
+    "properties": {
+        "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "更新日時 (ISO 8601)"
+        },
+        "files": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            },
+            "description": "今回の更新に含まれるファイル名一覧"
+        }
+    },
+    "additionalProperties": false
+}

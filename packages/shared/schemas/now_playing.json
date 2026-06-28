@@ -1,0 +1,40 @@
+{
+    "title": "NowPlaying",
+    "description": "現在再生中の楽曲情報",
+    "type": "object",
+    "required": [
+        "title",
+        "artist",
+        "updated_at"
+    ],
+    "properties": {
+        "title": {
+            "type": "string",
+            "description": "曲名"
+        },
+        "artist": {
+            "type": "string",
+            "description": "アーティスト名"
+        },
+        "album": {
+            "type": [
+                "string",
+                "null"
+            ],
+            "description": "アルバム名"
+        },
+        "artwork": {
+            "type": [
+                "string",
+                "null"
+            ],
+            "description": "アートワーク画像ファイル名 (同ディレクトリ内)"
+        },
+        "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "更新日時 (ISO 8601)"
+        }
+    },
+    "additionalProperties": false
+}

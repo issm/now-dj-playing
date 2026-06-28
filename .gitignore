@@ -1,0 +1,18 @@
+.envrc
+
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+target/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Tauri
+apps/viewer/src-tauri/gen/
