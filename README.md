@@ -75,6 +75,8 @@ cp .env.example .env.development
 cargo tauri dev
 ```
 
+`VITE_WATCH_DIR` はベースディレクトリを指定する。viewer は起動時にこのディレクトリを自動作成し、再帰的に監視する。`VITE_DEFAULT_DJ_ID` で指定した DJ ディレクトリが後から作成されても検知する（起動順序に依存しない）。
+
 ### Publisher (書き出しツール)
 
 ```sh
