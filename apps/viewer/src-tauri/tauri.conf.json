@@ -13,14 +13,20 @@
     "windows": [
       {
         "title": "Now DJ Playing",
-        "width": 800,
-        "height": 600,
+        "width": 1194,
+        "height": 834,
         "resizable": true,
         "fullscreen": false
       }
     ],
     "security": {
-      "csp": null
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": [
+          "**"
+        ]
+      }
     }
   },
   "bundle": {

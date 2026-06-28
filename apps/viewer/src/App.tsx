@@ -16,7 +16,9 @@ function App() {
             return;
         }
 
-        invoke("start_watch", { baseDir }).catch((err) => {
+        const djId = import.meta.env.VITE_DEFAULT_DJ_ID || "dj-000";
+
+        invoke("start_watch", { baseDir, djId }).catch((err) => {
             setError(String(err));
         });
 
@@ -62,11 +64,12 @@ function WaitingScreen() {
 
 function TrackDisplay({ track }: { track: TrackPayload }) {
     const djDisplay = track.djName ?? track.dirName;
+    const cacheBuster = `?t=${encodeURIComponent(track.updatedAt)}`;
     const artworkSrc = track.artworkPath
-        ? convertFileSrc(track.artworkPath)
+        ? convertFileSrc(track.artworkPath) + cacheBuster
         : null;
     const djLogoSrc = track.djLogoPath
-        ? convertFileSrc(track.djLogoPath)
+        ? convertFileSrc(track.djLogoPath) + cacheBuster
         : null;
 
     return (
