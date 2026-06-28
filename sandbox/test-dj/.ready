@@ -1,4 +1,7 @@
 {
-  "updated_at": "2026-06-28T12:32:00+09:00",
-  "files": ["now_playing.json"]
+  "updated_at": "2026-06-28T13:04:14.776680+09:00",
+  "files": [
+    "now_playing.json",
+    "artwork.jpg"
+  ]
 }
