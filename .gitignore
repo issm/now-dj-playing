@@ -14,5 +14,11 @@ target/
 *.swo
 .DS_Store
 
+# Environment
+.env
+.env.development
+.env.local
+.env.*.local
+
 # Tauri
 apps/viewer/src-tauri/gen/

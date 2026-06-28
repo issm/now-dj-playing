@@ -9,9 +9,12 @@ function App() {
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        // 開発時のデフォルト監視ディレクトリ
-        const baseDir =
-            import.meta.env.VITE_WATCH_DIR || `${import.meta.env.VITE_HOME}/sandbox`;
+        const baseDir = import.meta.env.VITE_WATCH_DIR;
+
+        if (!baseDir) {
+            setError("VITE_WATCH_DIR が設定されていません。.env.development を確認してください。");
+            return;
+        }
 
         invoke("start_watch", { baseDir }).catch((err) => {
             setError(String(err));
