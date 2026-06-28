@@ -106,3 +106,39 @@ pub enum ParseError {
     #[error("Missing required file {1} in {0}")]
     MissingFile(std::path::PathBuf, String),
 }
+
+/// ベースディレクトリ内の既存 .ready を走査し、有効な DjState を返す
+pub fn scan_existing(base_dir: &Path) -> Vec<DjState> {
+    let mut results = Vec::new();
+
+    let entries = match fs::read_dir(base_dir) {
+        Ok(entries) => entries,
+        Err(_) => return results,
+    };
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+
+        let ready_path = path.join(".ready");
+        if !ready_path.is_file() {
+            continue;
+        }
+
+        match parse_ready(&ready_path) {
+            Ok(manifest) => match build_dj_state(&path, &manifest) {
+                Ok(state) => results.push(state),
+                Err(e) => {
+                    log::warn!("スキャン中にエラー: {}", e);
+                }
+            },
+            Err(e) => {
+                log::warn!("スキャン中にエラー: {}", e);
+            }
+        }
+    }
+
+    results
+}

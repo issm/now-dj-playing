@@ -84,17 +84,14 @@ function TrackDisplay({ track }: { track: TrackPayload }) {
             </div>
 
             {/* アートワーク */}
-            {artworkSrc ? (
-                <img
-                    src={artworkSrc}
-                    alt="Artwork"
-                    className="h-64 w-64 rounded-lg object-cover shadow-lg"
-                />
-            ) : (
-                <div className="flex h-64 w-64 items-center justify-center rounded-lg bg-gray-800">
-                    <span className="text-6xl">🎵</span>
-                </div>
-            )}
+            <img
+                src={artworkSrc ?? "/default-artwork.png"}
+                alt="Artwork"
+                className="h-64 w-64 rounded-lg object-cover shadow-lg"
+                onError={(e) => {
+                    e.currentTarget.src = "/default-artwork.png";
+                }}
+            />
 
             {/* 楽曲情報 */}
             <div className="text-center">

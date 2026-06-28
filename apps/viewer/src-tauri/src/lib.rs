@@ -2,7 +2,7 @@ use serde::Serialize;
 use std::path::PathBuf;
 use std::thread;
 use tauri::{AppHandle, Emitter};
-use watch_core::{DirWatcher, DjProfile, WatchEvent};
+use watch_core::{scan_existing, DirWatcher, DjProfile, WatchEvent};
 
 /// フロントエンドに送る楽曲情報
 #[derive(Debug, Clone, Serialize)]
@@ -44,6 +44,29 @@ fn start_watch(app: AppHandle, base_dir: String) -> Result<String, String> {
 
 /// watcher のメインループ
 fn run_watcher(app: AppHandle, base_dir: PathBuf) {
+    // 起動時に既存の .ready をスキャンして即座に emit
+    let existing = scan_existing(&base_dir);
+    for state in existing {
+        let (dj_name, dj_logo_path) = match &state.profile {
+            DjProfile::Name(name) => (Some(name.clone()), None),
+            DjProfile::Logo(path) => (None, Some(path.display().to_string())),
+        };
+
+        let payload = TrackPayload {
+            dir_name: state.dir_name,
+            dj_name,
+            dj_logo_path,
+            title: state.now_playing.title,
+            artist: state.now_playing.artist,
+            album: state.now_playing.album,
+            artwork_path: state.artwork_path.map(|p| p.display().to_string()),
+            updated_at: state.now_playing.updated_at.to_rfc3339(),
+        };
+
+        log::info!("既存トラック検出: {} - {}", payload.artist, payload.title);
+        let _ = app.emit("track-changed", payload);
+    }
+
     let watcher = match DirWatcher::new(&base_dir) {
         Ok(w) => w,
         Err(e) => {
