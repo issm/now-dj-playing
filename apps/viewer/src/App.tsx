@@ -41,7 +41,7 @@ function App() {
     }, []);
 
     return (
-        <div className="flex min-h-screen flex-col items-center justify-center bg-black p-8 text-white">
+        <div className="flex h-screen flex-col items-center justify-center overflow-hidden bg-black text-white">
             {error && (
                 <div className="mb-4 rounded bg-red-900/50 px-4 py-2 text-red-200">
                     {error}
@@ -73,37 +73,46 @@ function TrackDisplay({ track }: { track: TrackPayload }) {
         : null;
 
     return (
-        <div className="flex flex-col items-center gap-6">
-            {/* DJ 情報 */}
-            <div className="flex items-center gap-3">
+        <div className="flex h-full w-full flex-col">
+            {/* ヘッダ: DJ 情報 */}
+            <header className="flex h-[15vh] shrink-0 items-center justify-center gap-3 px-8">
                 {djLogoSrc ? (
                     <img
                         src={djLogoSrc}
                         alt="DJ Logo"
-                        className="h-12 w-12 rounded-full object-cover"
+                        className="h-10 w-10 rounded-full object-cover md:h-12 md:w-12"
                     />
                 ) : null}
-                <span className="text-xl font-semibold text-gray-300">{djDisplay}</span>
-            </div>
+                <span className="text-xl font-semibold text-gray-300 md:text-3xl">
+                    {djDisplay}
+                </span>
+            </header>
 
-            {/* アートワーク */}
-            <img
-                src={artworkSrc ?? "/default-artwork.png"}
-                alt="Artwork"
-                className="h-64 w-64 rounded-lg object-cover shadow-lg"
-                onError={(e) => {
-                    e.currentTarget.src = "/default-artwork.png";
-                }}
-            />
+            {/* ボディ: アートワーク + 楽曲情報 */}
+            <main className="flex min-h-0 flex-1 flex-col items-center justify-center gap-8 px-8 pb-8 md:flex-row md:gap-12">
+                {/* 左: アートワーク */}
+                <div className="flex w-full shrink-0 items-center justify-center md:h-full md:w-1/2">
+                    <img
+                        src={artworkSrc ?? "/default-artwork.png"}
+                        alt="Artwork"
+                        className="aspect-square w-64 max-h-full rounded-lg object-cover shadow-lg md:w-full md:max-w-[85vh]"
+                        onError={(e) => {
+                            e.currentTarget.src = "/default-artwork.png";
+                        }}
+                    />
+                </div>
 
-            {/* 楽曲情報 */}
-            <div className="text-center">
-                <h2 className="text-3xl font-bold">{track.title}</h2>
-                <p className="mt-2 text-xl text-gray-300">{track.artist}</p>
-                {track.album && (
-                    <p className="mt-1 text-lg text-gray-500">{track.album}</p>
-                )}
-            </div>
+                {/* 右: 楽曲情報 */}
+                <div className="flex w-full flex-col items-center justify-center gap-4 md:h-full md:w-1/2 md:items-start">
+                    <div className="text-center md:text-left">
+                        <h2 className="text-2xl font-bold md:text-4xl">{track.title}</h2>
+                        <p className="mt-4 text-lg text-gray-300 md:text-2xl">{track.artist}</p>
+                        {track.album && (
+                            <p className="mt-4 text-base text-gray-500 md:text-lg">{track.album}</p>
+                        )}
+                    </div>
+                </div>
+            </main>
         </div>
     );
 }
