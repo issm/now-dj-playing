@@ -4,30 +4,33 @@ DJプレイ中の楽曲情報（曲名・アーティスト・アルバム・ア
 
 ## 概要
 
-DJ側から共有ディレクトリ（iCloud Drive 等）経由でファイルとして楽曲情報がプッシュされ、iPad 上の viewer アプリがそれを監視・解析・表示する。
+DJプレイ中の楽曲情報をリアルタイムに iPad へ表示するシステム。
+
+現在は Mac 上で publisher（楽曲情報の抽出）と viewer（表示）を動作させ、iPad を Sidecar でセカンダリモニタとして利用する構成で運用している。
 
 ```mermaid
 graph LR
-    A[DJ側<br/>楽曲ファイル<br/>mp3/m4a] -->|ndp-publish| B[共有ディレクトリ<br/>iCloud Drive]
-    B -->|ファイル監視| C[iPad<br/>viewer アプリ]
-
-    subgraph 共有ディレクトリ
-        B1[now_playing.json]
-        B2[artwork.png]
-        B3[.ready]
+    subgraph Mac
+        File[楽曲ファイル<br/>mp3/m4a]
+        P[Publisher]
+        Dir[共有ディレクトリ]
+        V[Viewer ウィンドウ]
     end
 
-    B --- B1
-    B --- B2
-    B --- B3
+    File -->|タグ抽出| P
+    P -->|書き出し| Dir
+    Dir -->|ファイル監視| V
+    V -->|Sidecar<br/>P2P Wi-Fi| iPad[iPad<br/>セカンダリモニタ]
 ```
+
+将来的には複数 publisher 対応や中継サーバ経由での構成を予定。詳細は [docs/vision.md](docs/vision.md) を参照。
 
 ## プロジェクト構成
 
 ```
 now-dj-playing/
 ├─ apps/
-│   ├─ viewer/          Tauri 2 + React + Vite + Tailwind (iPad 表示アプリ)
+│   ├─ viewer/          Tauri 2 + React + Vite + Tailwind (macOS 表示アプリ)
 │   └─ publisher/       楽曲タグ抽出 CLI ツール (Rust)
 ├─ packages/
 │   ├─ watch-core/      ファイル監視コアロジック (pure Rust)
@@ -43,7 +46,7 @@ now-dj-playing/
 - Node.js (nodenv で管理、バージョンは `.envrc` 参照)
 - Rust (rustup)
 - Yarn v1
-- Xcode (iOS ビルド時)
+- Xcode (Tauri macOS ビルド時)
 
 ### 手順
 
@@ -141,10 +144,9 @@ cargo run --example watch_local -- ../../sandbox
 
 ## 技術スタック
 
-- **Viewer**: Tauri 2 (iOS) + React + Vite + Tailwind CSS
+- **Viewer**: Tauri 2 (macOS) + React + Vite + Tailwind CSS
 - **Publisher**: Rust CLI (id3 + mp4ameta)
 - **Watch Core**: Rust (notify クレート)
-- **共有方式**: iCloud Drive (将来的に Dropbox 等へ拡張可能)
 
 ## ADR
 
