@@ -22,5 +22,6 @@ export interface AppConfig {
   watchDir: string;
   djId: string;
   enableComments: boolean;
+  showTags: boolean;
   configPath: string;
 }
