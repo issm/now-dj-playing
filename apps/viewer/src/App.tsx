@@ -16,6 +16,7 @@ function App() {
     const [infoMessage, setInfoMessage] = useState<string | null>(null);
     const [infoDismissing, setInfoDismissing] = useState(false);
     const [showComments, setShowComments] = useState(false);
+    const [showTags, setShowTags] = useState(true);
     const [showShortcuts, setShowShortcuts] = useState(false);
     const [reloading, setReloading] = useState(false);
     const trackRef = useRef<TrackPayload | null>(null);
@@ -56,6 +57,7 @@ function App() {
             const config = await invoke<AppConfig>("reload_config");
             setInfoMessage(`${config.configPath} を読み込みました`);
             setShowComments(config.enableComments);
+            setShowTags(config.showTags);
             await invoke("start_watch");
         } catch (err) {
             setError(String(err));
@@ -77,6 +79,9 @@ function App() {
             switch (e.key) {
                 case "c":
                     setShowComments((prev) => !prev);
+                    break;
+                case "t":
+                    setShowTags((prev) => !prev);
                     break;
                 case "m":
                     invoke("open_monitor")
@@ -129,8 +134,9 @@ function App() {
                 // 設定ファイルのパスを success 表示
                 setInfoMessage(`${config.configPath} を読み込みました`);
 
-                // 設定に基づいてコメント表示の初期値を反映
+                // 設定に基づいて初期値を反映
                 setShowComments(config.enableComments);
+                setShowTags(config.showTags);
 
                 // watcher を開始
                 await invoke("start_watch");
@@ -200,7 +206,7 @@ function App() {
                 </div>
             )}
 
-            {track ? <TrackDisplay track={track} showComments={showComments} /> : <WaitingScreen />}
+            {track ? <TrackDisplay track={track} showComments={showComments} showTags={showTags} /> : <WaitingScreen />}
 
             {showShortcuts && <ShortcutOverlay onClose={() => setShowShortcuts(false)} />}
         </div>
@@ -210,6 +216,7 @@ function App() {
 function ShortcutOverlay({ onClose }: { onClose: () => void }) {
     const shortcuts = [
         { key: "c", description: "コメント表示のトグル" },
+        { key: "t", description: "タグ表示のトグル" },
         { key: "m", description: "モニタウィンドウを開く" },
         { key: "?", description: "ショートカット一覧の表示" },
         { key: "Esc", description: "オーバーレイを閉じる" },
@@ -249,7 +256,7 @@ function WaitingScreen() {
     );
 }
 
-function TrackDisplay({ track, showComments }: { track: TrackPayload; showComments: boolean }) {
+function TrackDisplay({ track, showComments, showTags }: { track: TrackPayload; showComments: boolean; showTags: boolean }) {
     const djDisplay = track.djName ?? track.dirName;
     const cacheBuster = `?t=${encodeURIComponent(track.updatedAt)}`;
     const artworkSrc = track.artworkPath
@@ -299,7 +306,7 @@ function TrackDisplay({ track, showComments }: { track: TrackPayload; showCommen
                         )}
                     </div>
                     {showComments && track.comment && (
-                        <CommentDisplay raw={track.comment} />
+                        <CommentDisplay raw={track.comment} showTags={showTags} />
                     )}
                 </div>
             </main>
@@ -307,7 +314,7 @@ function TrackDisplay({ track, showComments }: { track: TrackPayload; showCommen
     );
 }
 
-function CommentDisplay({ raw }: { raw: string }) {
+function CommentDisplay({ raw, showTags }: { raw: string; showTags: boolean }) {
     const parsed = parseComment(raw);
 
     if (!parsed) {
@@ -318,77 +325,79 @@ function CommentDisplay({ raw }: { raw: string }) {
     return (
         <div className="mt-8 w-full space-y-2 border-t border-gray-700/50 pt-4">
             {parsed.type === "anison" ? (
-                <AnisonCommentView parsed={parsed} />
+                <AnisonCommentView parsed={parsed} showTags={showTags} />
             ) : (
-                <GenericCommentView parsed={parsed} />
+                <GenericCommentView parsed={parsed} showTags={showTags} />
             )}
         </div>
     );
 }
 
-function AnisonCommentView({ parsed }: { parsed: Extract<ParsedComment, { type: "anison" }> }) {
+function AnisonCommentView({ parsed, showTags }: { parsed: Extract<ParsedComment, { type: "anison" }>; showTags: boolean }) {
     return (
         <>
-            <div>
-                <span className="rounded bg-indigo-800/60 px-2 py-0.5 text-sm text-indigo-200">
-                    anison
-                </span>
-            </div>
             {parsed.source && (
                 <p className="text-base text-gray-300 md:text-lg">{parsed.source}</p>
             )}
             {parsed.category && (
                 <p className="text-base text-gray-500 md:text-lg">{parsed.category}</p>
             )}
-            <div className="flex flex-wrap gap-2">
-                {parsed.yearTags.map((tag) => (
-                    <span
-                        key={tag}
-                        className="rounded bg-emerald-800/60 px-2 py-0.5 text-sm text-emerald-200"
-                    >
-                        {tag}
+            {showTags && (
+                <div className="flex flex-wrap gap-2">
+                    <span className="rounded bg-indigo-800/60 px-2 py-0.5 text-sm text-indigo-200">
+                        anison
                     </span>
-                ))}
-                {parsed.attrTags.map((tag) => (
-                    <span
-                        key={tag}
-                        className="rounded bg-gray-700/60 px-2 py-0.5 text-sm text-gray-300"
-                    >
-                        {tag}
-                    </span>
-                ))}
-            </div>
+                    {parsed.yearTags.map((tag) => (
+                        <span
+                            key={tag}
+                            className="rounded bg-emerald-800/60 px-2 py-0.5 text-sm text-emerald-200"
+                        >
+                            {tag}
+                        </span>
+                    ))}
+                    {parsed.attrTags.map((tag) => (
+                        <span
+                            key={tag}
+                            className="rounded bg-gray-700/60 px-2 py-0.5 text-sm text-gray-300"
+                        >
+                            {tag}
+                        </span>
+                    ))}
+                </div>
+            )}
         </>
     );
 }
 
-function GenericCommentView({ parsed }: { parsed: Extract<ParsedComment, { type: "generic" }> }) {
+function GenericCommentView({ parsed, showTags }: { parsed: Extract<ParsedComment, { type: "generic" }>; showTags: boolean }) {
     return (
         <>
             {parsed.source && (
                 <p className="text-base text-gray-300 md:text-lg">{parsed.source}</p>
             )}
-            <div className="flex flex-wrap gap-2">
-                <span className="rounded bg-purple-800/60 px-2 py-0.5 text-sm text-purple-200">
-                    {parsed.primaryTag}
-                </span>
-                {parsed.yearTags.map((tag) => (
-                    <span
-                        key={tag}
-                        className="rounded bg-emerald-800/60 px-2 py-0.5 text-sm text-emerald-200"
-                    >
-                        {tag}
+            {showTags && (
+                <div className="flex flex-wrap gap-2">
+                    <span className="rounded bg-purple-800/60 px-2 py-0.5 text-sm text-purple-200">
+                        {parsed.primaryTag}
                     </span>
-                ))}
-                {parsed.attrTags.map((tag) => (
-                    <span
-                        key={tag}
-                        className="rounded bg-gray-700/60 px-2 py-0.5 text-sm text-gray-300"
-                    >
-                        {tag}
-                    </span>
-                ))}
-            </div>
+                    {parsed.yearTags.map((tag) => (
+                        <span
+                            key={tag}
+                            className="rounded bg-emerald-800/60 px-2 py-0.5 text-sm text-emerald-200"
+                        >
+                            {tag}
+                        </span>
+                    ))}
+                    {parsed.attrTags.map((tag) => (
+                        <span
+                            key={tag}
+                            className="rounded bg-gray-700/60 px-2 py-0.5 text-sm text-gray-300"
+                        >
+                            {tag}
+                        </span>
+                    ))}
+                </div>
+            )}
         </>
     );
 }
