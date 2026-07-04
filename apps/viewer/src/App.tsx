@@ -209,6 +209,17 @@ function App() {
             {track ? <TrackDisplay track={track} showComments={showComments} showTags={showTags} /> : <WaitingScreen />}
 
             {showShortcuts && <ShortcutOverlay onClose={() => setShowShortcuts(false)} />}
+
+            {/* バージョン情報（右下固定） */}
+            <VersionDisplay />
+        </div>
+    );
+}
+
+function VersionDisplay() {
+    return (
+        <div className="absolute bottom-2 right-3 text-xs text-gray-600 select-none">
+            Version: {__APP_FULL_VERSION__}
         </div>
     );
 }

@@ -51,6 +51,22 @@ pub struct ErrorPayload {
     pub message: String,
 }
 
+/// フロントエンドに送るバージョン情報
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VersionInfo {
+    /// SemVer バージョン (例: "0.1.0")
+    pub version: String,
+    /// ビルドメタデータ (例: "20260704T123045.a1b2c3d")
+    pub build_metadata: String,
+    /// ビルド時刻 (例: "20260704T123045")
+    pub build_timestamp: String,
+    /// git commit hash (例: "a1b2c3d")
+    pub commit_hash: String,
+    /// フル表記 (例: "0.1.0+20260704T123045.a1b2c3d")
+    pub full: String,
+}
+
 /// フロントエンドに設定を返すコマンド
 #[tauri::command]
 fn get_app_config() -> Result<AppConfig, String> {
@@ -61,6 +77,25 @@ fn get_app_config() -> Result<AppConfig, String> {
 #[tauri::command]
 fn reload_config() -> Result<AppConfig, String> {
     reload_config_inner()
+}
+
+/// バージョン情報を返すコマンド
+#[tauri::command]
+fn get_version_info() -> VersionInfo {
+    let version = env!("CARGO_PKG_VERSION").to_string();
+    let build_metadata = env!("BUILD_METADATA").to_string();
+    let build_timestamp = env!("BUILD_TIMESTAMP").to_string();
+    let commit_hash = env!("BUILD_COMMIT_HASH").to_string();
+    let dev_suffix = env!("BUILD_DEV_SUFFIX").to_string();
+    let full = format!("{}+{}{}", version, build_metadata, dev_suffix);
+
+    VersionInfo {
+        version,
+        build_metadata,
+        build_timestamp,
+        commit_hash,
+        full,
+    }
 }
 
 /// 監視を開始するコマンド（設定はバックエンドから取得）
@@ -218,6 +253,10 @@ pub fn run() {
                 Err(e) => log::error!("App config error: {}", e),
             }
 
+            // バージョン情報をログに表示
+            let version_info = get_version_info();
+            log::info!("App version: {}", version_info.full);
+
             // メインウィンドウが閉じられたらアプリ全体を終了する
             let main_window = app.get_webview_window("main").unwrap();
             main_window.on_window_event(move |event| {
@@ -233,6 +272,7 @@ pub fn run() {
             get_app_config,
             reload_config,
             open_monitor,
+            get_version_info,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
