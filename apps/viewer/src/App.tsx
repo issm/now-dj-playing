@@ -111,10 +111,10 @@ function TrackDisplay({ track }: { track: TrackPayload }) {
                         {track.album && (
                             <p className="mt-4 text-base text-gray-500 md:text-lg">{track.album}</p>
                         )}
-                        {import.meta.env.VITE_ENABLE_COMMENTS === "1" && track.comment && (
-                            <CommentDisplay raw={track.comment} />
-                        )}
                     </div>
+                    {import.meta.env.VITE_ENABLE_COMMENTS === "1" && track.comment && (
+                        <CommentDisplay raw={track.comment} />
+                    )}
                 </div>
             </main>
         </div>
@@ -130,7 +130,7 @@ function CommentDisplay({ raw }: { raw: string }) {
     }
 
     return (
-        <div className="mt-8 space-y-2">
+        <div className="mt-8 w-full space-y-2 border-t border-gray-700/50 pt-4">
             {parsed.type === "anison" ? (
                 <AnisonCommentView parsed={parsed} />
             ) : (
