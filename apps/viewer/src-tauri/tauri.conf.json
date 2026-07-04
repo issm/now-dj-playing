@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Now DJ Playing",
+        "title": "now-dj-playing",
         "width": 1194,
         "height": 834,
         "resizable": true,

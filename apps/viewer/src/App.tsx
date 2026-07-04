@@ -57,8 +57,8 @@ function App() {
 function WaitingScreen() {
     return (
         <div className="text-center">
-            <h1 className="text-4xl font-bold">Now DJ Playing</h1>
-            <p className="mt-4 text-lg text-gray-400">Waiting for track info...</p>
+            <h1 className="text-4xl font-bold">now-dj-playing</h1>
+            <p className="mt-4 text-lg text-gray-400">トラック情報を待機中...</p>
         </div>
     );
 }
