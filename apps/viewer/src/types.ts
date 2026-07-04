@@ -25,3 +25,17 @@ export interface AppConfig {
   showTags: boolean;
   configPath: string;
 }
+
+/** Rust 側から返されるバージョン情報 */
+export interface VersionInfo {
+  /** SemVer バージョン (例: "0.1.0") */
+  version: string;
+  /** ビルドメタデータ (例: "20260704T123045.a1b2c3d") */
+  buildMetadata: string;
+  /** ビルド時刻 (例: "20260704T123045") */
+  buildTimestamp: string;
+  /** git commit hash (例: "a1b2c3d") */
+  commitHash: string;
+  /** フル表記 (例: "0.1.0+20260704T123045.a1b2c3d") */
+  full: string;
+}
