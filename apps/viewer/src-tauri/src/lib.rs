@@ -1,9 +1,32 @@
+mod config;
+
+use config::AppConfig;
 use serde::Serialize;
 use std::path::PathBuf;
+use std::sync::Mutex;
 use std::thread;
 use tauri::webview::WebviewWindowBuilder;
 use tauri::{AppHandle, Emitter, Manager};
 use watch_core::{DirWatcher, DjProfile, WatchEvent};
+
+/// アプリケーション設定のグローバルインスタンス
+static APP_CONFIG: Mutex<Option<Result<AppConfig, String>>> = Mutex::new(None);
+
+fn get_or_init_config() -> Result<AppConfig, String> {
+    let mut guard = APP_CONFIG.lock().unwrap();
+    if guard.is_none() {
+        *guard = Some(config::load_config());
+    }
+    guard.as_ref().unwrap().clone()
+}
+
+/// 設定を再読み込みする
+fn reload_config_inner() -> Result<AppConfig, String> {
+    let mut guard = APP_CONFIG.lock().unwrap();
+    let result = config::load_config();
+    *guard = Some(result.clone());
+    result
+}
 
 /// フロントエンドに送る楽曲情報
 #[derive(Debug, Clone, Serialize)]
@@ -28,10 +51,26 @@ pub struct ErrorPayload {
     pub message: String,
 }
 
-/// 監視ディレクトリを指定して watcher を開始するコマンド
+/// フロントエンドに設定を返すコマンド
 #[tauri::command]
-fn start_watch(app: AppHandle, base_dir: String, dj_id: Option<String>) -> Result<String, String> {
-    let path = PathBuf::from(&base_dir);
+fn get_app_config() -> Result<AppConfig, String> {
+    get_or_init_config()
+}
+
+/// 設定を再読み込みして返すコマンド
+#[tauri::command]
+fn reload_config() -> Result<AppConfig, String> {
+    reload_config_inner()
+}
+
+/// 監視を開始するコマンド（設定はバックエンドから取得）
+#[tauri::command]
+fn start_watch(app: AppHandle) -> Result<String, String> {
+    let config = get_or_init_config()?;
+    let base_dir = &config.watch_dir;
+    let dj_id = &config.dj_id;
+
+    let path = PathBuf::from(base_dir);
 
     // ベースディレクトリがなければ作成する
     if !path.is_dir() {
@@ -39,13 +78,14 @@ fn start_watch(app: AppHandle, base_dir: String, dj_id: Option<String>) -> Resul
             .map_err(|e| format!("ディレクトリの作成に失敗: {}: {}", base_dir, e))?;
     }
 
-    let dj_id = dj_id.unwrap_or_else(|| "dj-000".to_string());
+    let dj_id = dj_id.clone();
+    let base_dir_display = base_dir.clone();
     let app_handle = app.clone();
     thread::spawn(move || {
         run_watcher(app_handle, path, dj_id);
     });
 
-    Ok(format!("監視を開始しました: {}", base_dir))
+    Ok(format!("監視を開始しました: {}", base_dir_display))
 }
 
 /// モニタウィンドウを開くコマンド（既に開いている場合はフォーカス）
@@ -172,6 +212,12 @@ pub fn run() {
                 )?;
             }
 
+            // 設定を早期にロードしてログに表示
+            match get_or_init_config() {
+                Ok(config) => log::info!("App config loaded: {:?}", config),
+                Err(e) => log::error!("App config error: {}", e),
+            }
+
             // メインウィンドウが閉じられたらアプリ全体を終了する
             let main_window = app.get_webview_window("main").unwrap();
             main_window.on_window_event(move |event| {
@@ -182,7 +228,12 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![start_watch, open_monitor])
+        .invoke_handler(tauri::generate_handler![
+            start_watch,
+            get_app_config,
+            reload_config,
+            open_monitor,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

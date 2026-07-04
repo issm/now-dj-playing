@@ -1,23 +1,68 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { listen, emitTo } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import type { TrackPayload } from "./types";
+import type { TrackPayload, AppConfig } from "./types";
 import { parseComment, type ParsedComment } from "./commentParser";
 import MonitorView from "./MonitorView";
+
+/** success アラートの自動非表示までの時間 (ms) */
+const INFO_AUTO_DISMISS_MS = 30_000;
 
 function App() {
     const [track, setTrack] = useState<TrackPayload | null>(null);
     const [error, setError] = useState<string | null>(null);
-    const [showComments, setShowComments] = useState(
-        import.meta.env.VITE_ENABLE_COMMENTS === "1",
-    );
+    const [infoMessage, setInfoMessage] = useState<string | null>(null);
+    const [infoDismissing, setInfoDismissing] = useState(false);
+    const [showComments, setShowComments] = useState(false);
     const [showShortcuts, setShowShortcuts] = useState(false);
+    const [reloading, setReloading] = useState(false);
     const trackRef = useRef<TrackPayload | null>(null);
+    const infoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const windowLabel = getCurrentWebviewWindow().label;
     const isMonitor = windowLabel === "monitor";
+
+    // info アラートを閉じる（スライドアップアニメーション付き）
+    const dismissInfo = useCallback(() => {
+        setInfoDismissing(true);
+        setTimeout(() => {
+            setInfoMessage(null);
+            setInfoDismissing(false);
+        }, 300); // アニメーション duration に合わせる
+    }, []);
+
+    // info メッセージが設定されたら 30 秒後に自動で閉じる
+    useEffect(() => {
+        if (infoMessage && !infoDismissing) {
+            infoTimerRef.current = setTimeout(dismissInfo, INFO_AUTO_DISMISS_MS);
+            return () => {
+                if (infoTimerRef.current) {
+                    clearTimeout(infoTimerRef.current);
+                    infoTimerRef.current = null;
+                }
+            };
+        }
+    }, [infoMessage, infoDismissing, dismissInfo]);
+
+    // 設定を再読み込みして watcher を起動する
+    const handleReloadConfig = async () => {
+        setReloading(true);
+        setError(null);
+        setInfoMessage(null);
+        setInfoDismissing(false);
+        try {
+            const config = await invoke<AppConfig>("reload_config");
+            setInfoMessage(`${config.configPath} を読み込みました`);
+            setShowComments(config.enableComments);
+            await invoke("start_watch");
+        } catch (err) {
+            setError(String(err));
+        } finally {
+            setReloading(false);
+        }
+    };
 
     // trackRef を最新の track に追従させる
     useEffect(() => {
@@ -72,19 +117,29 @@ function App() {
             };
         }
 
-        // メインウィンドウ: watcher を開始し、トラック情報をモニタに転送
-        const baseDir = import.meta.env.VITE_WATCH_DIR;
+        // メインウィンドウ: バックエンドから設定を取得し、watcher を開始
+        let cancelled = false;
 
-        if (!baseDir) {
-            setError("VITE_WATCH_DIR が設定されていません。.env.development を確認してください。");
-            return;
-        }
+        (async () => {
+            try {
+                const config = await invoke<AppConfig>("get_app_config");
 
-        const djId = import.meta.env.VITE_DEFAULT_DJ_ID || "dj-000";
+                if (cancelled) return;
 
-        invoke("start_watch", { baseDir, djId }).catch((err) => {
-            setError(String(err));
-        });
+                // 設定ファイルのパスを success 表示
+                setInfoMessage(`${config.configPath} を読み込みました`);
+
+                // 設定に基づいてコメント表示の初期値を反映
+                setShowComments(config.enableComments);
+
+                // watcher を開始
+                await invoke("start_watch");
+            } catch (err) {
+                if (!cancelled) {
+                    setError(String(err));
+                }
+            }
+        })();
 
         const unlistenTrack = listen<TrackPayload>("track-changed", (event) => {
             setTrack(event.payload);
@@ -101,6 +156,7 @@ function App() {
         );
 
         return () => {
+            cancelled = true;
             unlistenTrack.then((fn) => fn());
             unlistenError.then((fn) => fn());
         };
@@ -113,9 +169,34 @@ function App() {
 
     return (
         <div className="flex h-screen flex-col items-center justify-center overflow-hidden bg-black text-white">
+            {/* success アラート（上部固定、スライドダウン/アップ） */}
+            {infoMessage && (
+                <div
+                    className={`absolute left-0 right-0 top-0 z-40 flex items-center justify-between bg-green-900/80 px-4 py-2 text-sm text-green-200 ${infoDismissing ? "animate-slide-up" : "animate-slide-down"
+                        }`}
+                >
+                    <span>{infoMessage}</span>
+                    <button
+                        onClick={dismissInfo}
+                        className="ml-4 text-green-300 hover:text-white"
+                        aria-label="閉じる"
+                    >
+                        &times;
+                    </button>
+                </div>
+            )}
+
+            {/* error アラート（上部固定、スライドダウン、リロードボタン付き） */}
             {error && (
-                <div className="mb-4 rounded bg-red-900/50 px-4 py-2 text-red-200">
-                    {error}
+                <div className="absolute left-0 right-0 top-0 z-50 flex animate-slide-down items-center justify-between bg-red-900/80 px-4 py-2 text-sm text-red-200">
+                    <span>{error}</span>
+                    <button
+                        onClick={handleReloadConfig}
+                        disabled={reloading}
+                        className="ml-4 shrink-0 rounded bg-red-700 px-3 py-1 text-xs text-red-100 hover:bg-red-600 disabled:opacity-50"
+                    >
+                        {reloading ? "読込中..." : "再読み込み"}
+                    </button>
                 </div>
             )}
 

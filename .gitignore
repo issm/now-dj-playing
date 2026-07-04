@@ -9,7 +9,6 @@ target/
 *.tsbuildinfo
 
 # IDE
-.vscode/
 .idea/
 *.swp
 *.swo
@@ -20,6 +19,9 @@ target/
 .env.development
 .env.local
 .env.*.local
+
+# App config (開発用)
+apps/viewer/src-tauri/config/development.json
 
 # Tauri
 apps/viewer/src-tauri/gen/

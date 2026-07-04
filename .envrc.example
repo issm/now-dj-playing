@@ -1,2 +1,5 @@
 export NODENV_VERSION=24.18.0
 export APPLE_DEVELOPMENT_TEAM=
+
+# viewer アプリの設定ファイルパス（開発用）
+export NDP_CONFIG="$PWD/apps/viewer/src-tauri/config/development.json"
