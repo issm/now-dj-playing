@@ -47,6 +47,7 @@ export function parseComment(raw: string): ParsedComment | null {
   const tags = tagMatches.map((t) => t.slice(1));
 
   const primaryTag = tags[0];
+  if (!primaryTag) return null;
   const restTags = tags.slice(1);
 
   // 年代系と属性系に分類
@@ -88,6 +89,8 @@ function parsePrefix(prefix: string): {
   if (tokens.length === 0) return {};
 
   const lastToken = tokens[tokens.length - 1];
+  if (!lastToken) return {};
+
   if (CATEGORY_PATTERN.test(lastToken)) {
     const source = tokens.slice(0, -1).join(" ") || undefined;
     return { source, category: lastToken };
