@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import type { TrackPayload } from "./types";
+import { parseComment, type ParsedComment } from "./commentParser";
 
 function App() {
     const [track, setTrack] = useState<TrackPayload | null>(null);
@@ -111,12 +112,98 @@ function TrackDisplay({ track }: { track: TrackPayload }) {
                             <p className="mt-4 text-base text-gray-500 md:text-lg">{track.album}</p>
                         )}
                         {import.meta.env.VITE_ENABLE_COMMENTS === "1" && track.comment && (
-                            <p className="mt-4 text-base text-gray-400 md:text-lg">{track.comment}</p>
+                            <CommentDisplay raw={track.comment} />
                         )}
                     </div>
                 </div>
             </main>
         </div>
+    );
+}
+
+function CommentDisplay({ raw }: { raw: string }) {
+    const parsed = parseComment(raw);
+
+    if (!parsed) {
+        // 構造化できないコメントはそのまま表示
+        return <p className="mt-8 text-base text-gray-400 md:text-lg">{raw}</p>;
+    }
+
+    return (
+        <div className="mt-8 space-y-2">
+            {parsed.type === "anison" ? (
+                <AnisonCommentView parsed={parsed} />
+            ) : (
+                <GenericCommentView parsed={parsed} />
+            )}
+        </div>
+    );
+}
+
+function AnisonCommentView({ parsed }: { parsed: Extract<ParsedComment, { type: "anison" }> }) {
+    return (
+        <>
+            <div>
+                <span className="rounded bg-indigo-800/60 px-2 py-0.5 text-sm text-indigo-200">
+                    anison
+                </span>
+            </div>
+            {parsed.source && (
+                <p className="text-base text-gray-300 md:text-lg">{parsed.source}</p>
+            )}
+            {parsed.category && (
+                <p className="text-base text-gray-500 md:text-lg">{parsed.category}</p>
+            )}
+            <div className="flex flex-wrap gap-2">
+                {parsed.yearTags.map((tag) => (
+                    <span
+                        key={tag}
+                        className="rounded bg-emerald-800/60 px-2 py-0.5 text-sm text-emerald-200"
+                    >
+                        {tag}
+                    </span>
+                ))}
+                {parsed.attrTags.map((tag) => (
+                    <span
+                        key={tag}
+                        className="rounded bg-gray-700/60 px-2 py-0.5 text-sm text-gray-300"
+                    >
+                        {tag}
+                    </span>
+                ))}
+            </div>
+        </>
+    );
+}
+
+function GenericCommentView({ parsed }: { parsed: Extract<ParsedComment, { type: "generic" }> }) {
+    return (
+        <>
+            {parsed.source && (
+                <p className="text-base text-gray-300 md:text-lg">{parsed.source}</p>
+            )}
+            <div className="flex flex-wrap gap-2">
+                <span className="rounded bg-purple-800/60 px-2 py-0.5 text-sm text-purple-200">
+                    {parsed.primaryTag}
+                </span>
+                {parsed.yearTags.map((tag) => (
+                    <span
+                        key={tag}
+                        className="rounded bg-emerald-800/60 px-2 py-0.5 text-sm text-emerald-200"
+                    >
+                        {tag}
+                    </span>
+                ))}
+                {parsed.attrTags.map((tag) => (
+                    <span
+                        key={tag}
+                        className="rounded bg-gray-700/60 px-2 py-0.5 text-sm text-gray-300"
+                    >
+                        {tag}
+                    </span>
+                ))}
+            </div>
+        </>
     );
 }
 
