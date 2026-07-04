@@ -11,12 +11,21 @@ function App() {
     const [showComments, setShowComments] = useState(
         import.meta.env.VITE_ENABLE_COMMENTS === "1",
     );
+    const [showShortcuts, setShowShortcuts] = useState(false);
 
-    // `c` キーでコメント表示をトグル
+    // キーボードショートカット
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === "c") {
-                setShowComments((prev) => !prev);
+            switch (e.key) {
+                case "c":
+                    setShowComments((prev) => !prev);
+                    break;
+                case "?":
+                    setShowShortcuts((prev) => !prev);
+                    break;
+                case "Escape":
+                    setShowShortcuts(false);
+                    break;
             }
         };
         window.addEventListener("keydown", handleKeyDown);
@@ -64,6 +73,40 @@ function App() {
             )}
 
             {track ? <TrackDisplay track={track} showComments={showComments} /> : <WaitingScreen />}
+
+            {showShortcuts && <ShortcutOverlay onClose={() => setShowShortcuts(false)} />}
+        </div>
+    );
+}
+
+function ShortcutOverlay({ onClose }: { onClose: () => void }) {
+    const shortcuts = [
+        { key: "c", description: "コメント表示のトグル" },
+        { key: "?", description: "ショートカット一覧の表示" },
+        { key: "Esc", description: "オーバーレイを閉じる" },
+    ];
+
+    return (
+        <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80"
+            onClick={onClose}
+        >
+            <div
+                className="w-80 rounded-lg border border-gray-700 bg-gray-900 p-6 shadow-xl"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <h2 className="mb-4 text-lg font-bold text-gray-100">キーボードショートカット</h2>
+                <ul className="space-y-3">
+                    {shortcuts.map(({ key, description }) => (
+                        <li key={key} className="flex items-center justify-between">
+                            <span className="text-gray-300">{description}</span>
+                            <kbd className="rounded bg-gray-700 px-2 py-0.5 font-mono text-sm text-gray-200">
+                                {key}
+                            </kbd>
+                        </li>
+                    ))}
+                </ul>
+            </div>
         </div>
     );
 }
