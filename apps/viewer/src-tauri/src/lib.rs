@@ -14,6 +14,7 @@ pub struct TrackPayload {
     pub title: String,
     pub artist: String,
     pub album: Option<String>,
+    pub comment: Option<String>,
     pub artwork_path: Option<String>,
     pub updated_at: String,
 }
@@ -128,6 +129,7 @@ fn emit_track_changed(app: &AppHandle, state: watch_core::DjState) {
         title: state.now_playing.title,
         artist: state.now_playing.artist,
         album: state.now_playing.album,
+        comment: state.now_playing.comment,
         artwork_path: state.artwork_path.map(|p| p.display().to_string()),
         updated_at: state.now_playing.updated_at.to_rfc3339(),
     };
