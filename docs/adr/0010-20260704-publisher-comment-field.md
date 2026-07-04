@@ -20,10 +20,11 @@ Accepted
 
 | フォーマット | クレート | API |
 |---|---|---|
-| MP3 (ID3) | `id3` | `tag.comments().next().map(\|c\| c.text.clone())` |
+| MP3 (ID3) | `id3` | `tag.comments().find(\|c\| c.description.is_empty() \|\| c.description == "Comment").map(\|c\| c.text.clone())` |
 | M4A (MP4) | `mp4ameta` | `tag.comment().map(\|s\| s.to_string())` |
 
-- ID3 の COMM フレームは複数存在しうるが、最初の1件のテキスト部分を採用する
+- ID3 の COMM フレームは複数存在しうる。`description` が空文字列または `"Comment"` のフレームのみをユーザーコメントとして採用する
+- `description` が `"iTunNORM"` や `"iTunSMPB"` 等のフレームは iTunes 内部データであり、除外する
 - 空文字列はコメントなしとして扱う（`.filter(|s| !s.is_empty())`）
 
 ### now_playing.json の出力例
@@ -42,7 +43,7 @@ Accepted
 ## 理由
 
 - コメントは optional フィールドとすることで、後方互換性を維持する（既存の viewer はフィールドを無視するだけで動作継続可能）
-- ID3 の COMM フレームは description/language で区別されるが、DJ 用途では最初の1件で十分と判断
+- ID3 の COMM フレームは description/language で区別される。`description` が空文字列または `"Comment"` のフレームのみを採用し、iTunNORM 等の iTunes 内部データを誤って取得しないようにした
 - 空文字列のフィルタにより、viewer 側で不要な空表示を防ぐ
 
 ## 影響
