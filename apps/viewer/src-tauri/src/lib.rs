@@ -1,8 +1,8 @@
 use serde::Serialize;
 use std::path::PathBuf;
 use std::thread;
-use tauri::{AppHandle, Emitter, Manager};
 use tauri::webview::WebviewWindowBuilder;
+use tauri::{AppHandle, Emitter, Manager};
 use watch_core::{DirWatcher, DjProfile, WatchEvent};
 
 /// フロントエンドに送る楽曲情報
@@ -59,8 +59,8 @@ fn open_monitor(app: AppHandle) -> Result<(), String> {
 
     // 新しいモニタウィンドウを作成
     WebviewWindowBuilder::new(&app, "monitor", tauri::WebviewUrl::App("/".into()))
-        .title("now-dj-playing monitor")
-        .inner_size(480.0, 320.0)
+        .title("ndp-monitor")
+        .inner_size(240.0, 280.0)
         .resizable(true)
         .always_on_top(true)
         .build()
