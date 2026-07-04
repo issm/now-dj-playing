@@ -1,7 +1,8 @@
 use serde::Serialize;
 use std::path::PathBuf;
 use std::thread;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
+use tauri::webview::WebviewWindowBuilder;
 use watch_core::{DirWatcher, DjProfile, WatchEvent};
 
 /// フロントエンドに送る楽曲情報
@@ -45,6 +46,27 @@ fn start_watch(app: AppHandle, base_dir: String, dj_id: Option<String>) -> Resul
     });
 
     Ok(format!("監視を開始しました: {}", base_dir))
+}
+
+/// モニタウィンドウを開くコマンド（既に開いている場合はフォーカス）
+#[tauri::command]
+fn open_monitor(app: AppHandle) -> Result<(), String> {
+    // 既にモニタウィンドウが存在する場合はフォーカスのみ
+    if let Some(window) = app.get_webview_window("monitor") {
+        window.set_focus().map_err(|e| e.to_string())?;
+        return Ok(());
+    }
+
+    // 新しいモニタウィンドウを作成
+    WebviewWindowBuilder::new(&app, "monitor", tauri::WebviewUrl::App("/".into()))
+        .title("now-dj-playing monitor")
+        .inner_size(480.0, 320.0)
+        .resizable(true)
+        .always_on_top(true)
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
 }
 
 /// watcher のメインループ
@@ -151,7 +173,7 @@ pub fn run() {
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![start_watch])
+        .invoke_handler(tauri::generate_handler![start_watch, open_monitor])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
