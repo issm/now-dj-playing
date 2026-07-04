@@ -96,7 +96,7 @@ function TrackDisplay({ track }: { track: TrackPayload }) {
                     <img
                         src={artworkSrc ?? "/default-artwork.png"}
                         alt="Artwork"
-                        className="aspect-square w-64 max-h-full rounded-lg object-cover shadow-lg md:w-full md:max-w-[85vh]"
+                        className="w-64 max-h-full rounded-lg object-contain shadow-lg md:w-full md:max-w-[85vh]"
                         onError={(e) => {
                             e.currentTarget.src = "/default-artwork.png";
                         }}
