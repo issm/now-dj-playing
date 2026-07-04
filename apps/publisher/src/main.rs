@@ -161,7 +161,7 @@ fn read_mp3_tags(path: &PathBuf) -> Result<TrackMeta> {
     let album = tag.album().map(|s| s.to_string());
     let comment = tag
         .comments()
-        .next()
+        .find(|c| c.description.is_empty() || c.description == "Comment")
         .map(|c| c.text.clone())
         .filter(|s| !s.is_empty());
 
