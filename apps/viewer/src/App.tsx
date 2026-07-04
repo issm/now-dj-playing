@@ -8,6 +8,20 @@ import { parseComment, type ParsedComment } from "./commentParser";
 function App() {
     const [track, setTrack] = useState<TrackPayload | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [showComments, setShowComments] = useState(
+        import.meta.env.VITE_ENABLE_COMMENTS === "1",
+    );
+
+    // `c` キーでコメント表示をトグル
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === "c") {
+                setShowComments((prev) => !prev);
+            }
+        };
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
+    }, []);
 
     useEffect(() => {
         const baseDir = import.meta.env.VITE_WATCH_DIR;
@@ -49,7 +63,7 @@ function App() {
                 </div>
             )}
 
-            {track ? <TrackDisplay track={track} /> : <WaitingScreen />}
+            {track ? <TrackDisplay track={track} showComments={showComments} /> : <WaitingScreen />}
         </div>
     );
 }
@@ -63,7 +77,7 @@ function WaitingScreen() {
     );
 }
 
-function TrackDisplay({ track }: { track: TrackPayload }) {
+function TrackDisplay({ track, showComments }: { track: TrackPayload; showComments: boolean }) {
     const djDisplay = track.djName ?? track.dirName;
     const cacheBuster = `?t=${encodeURIComponent(track.updatedAt)}`;
     const artworkSrc = track.artworkPath
@@ -112,7 +126,7 @@ function TrackDisplay({ track }: { track: TrackPayload }) {
                             <p className="mt-4 text-base text-gray-500 md:text-lg">{track.album}</p>
                         )}
                     </div>
-                    {import.meta.env.VITE_ENABLE_COMMENTS === "1" && track.comment && (
+                    {showComments && track.comment && (
                         <CommentDisplay raw={track.comment} />
                     )}
                 </div>
