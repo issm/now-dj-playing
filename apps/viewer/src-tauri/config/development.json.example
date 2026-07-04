@@ -1,0 +1,6 @@
+{
+  // 監視対象ディレクトリ（~ はホームディレクトリに展開される）
+  "watch_dir": "/tmp/ndp",
+  "dj_id": "dj-000",
+  "enable_comments": false
+}

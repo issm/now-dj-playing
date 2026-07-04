@@ -16,3 +16,11 @@ export interface ErrorPayload {
   dirName: string;
   message: string;
 }
+
+/** Rust 側から返されるアプリ設定 */
+export interface AppConfig {
+  watchDir: string;
+  djId: string;
+  enableComments: boolean;
+  configPath: string;
+}
