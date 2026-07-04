@@ -26,7 +26,7 @@ function MonitorView({ track }: { track: TrackPayload | null }) {
                 <img
                     src={artworkSrc ?? "/default-artwork.png"}
                     alt="Artwork"
-                    className="aspect-square w-3/4 rounded object-cover shadow-md"
+                    className="aspect-square w-3/4 rounded object-contain shadow-md"
                     onError={(e) => {
                         e.currentTarget.src = "/default-artwork.png";
                     }}
