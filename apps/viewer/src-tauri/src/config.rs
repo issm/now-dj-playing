@@ -9,6 +9,7 @@ pub struct AppConfigFile {
     pub watch_dir: Option<String>,
     pub dj_id: Option<String>,
     pub enable_comments: Option<bool>,
+    pub show_tags: Option<bool>,
 }
 
 /// アプリケーション設定（デフォルト値が適用済み）
@@ -18,6 +19,7 @@ pub struct AppConfig {
     pub watch_dir: String,
     pub dj_id: String,
     pub enable_comments: bool,
+    pub show_tags: bool,
     /// 読み込まれた設定ファイルのフルパス
     pub config_path: String,
 }
@@ -95,6 +97,7 @@ fn merge_config(file: AppConfigFile, config_path: &PathBuf) -> AppConfig {
         watch_dir,
         dj_id: file.dj_id.unwrap_or_else(|| "dj-000".to_string()),
         enable_comments: file.enable_comments.unwrap_or(false),
+        show_tags: file.show_tags.unwrap_or(true),
         config_path: config_path.display().to_string(),
     }
 }
