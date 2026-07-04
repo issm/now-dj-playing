@@ -37,6 +37,8 @@ struct NowPlaying {
     album: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     artwork: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    comment: Option<String>,
     updated_at: String,
 }
 
@@ -51,6 +53,7 @@ struct TrackMeta {
     title: String,
     artist: String,
     album: Option<String>,
+    comment: Option<String>,
     artwork: Option<ArtworkData>,
 }
 
@@ -120,6 +123,7 @@ fn main() -> Result<()> {
         artist: meta.artist.clone(),
         album: meta.album.clone(),
         artwork: artwork_filename,
+        comment: meta.comment.clone(),
         updated_at: updated_at.clone(),
     };
 
@@ -155,6 +159,11 @@ fn read_mp3_tags(path: &PathBuf) -> Result<TrackMeta> {
     let title = tag.title().unwrap_or("Unknown Title").to_string();
     let artist = tag.artist().unwrap_or("Unknown Artist").to_string();
     let album = tag.album().map(|s| s.to_string());
+    let comment = tag
+        .comments()
+        .find(|c| c.description.is_empty() || c.description == "Comment")
+        .map(|c| c.text.clone())
+        .filter(|s| !s.is_empty());
 
     let artwork = tag.pictures().next().map(|pic| ArtworkData {
         data: pic.data.clone(),
@@ -165,6 +174,7 @@ fn read_mp3_tags(path: &PathBuf) -> Result<TrackMeta> {
         title,
         artist,
         album,
+        comment,
         artwork,
     })
 }
@@ -177,6 +187,10 @@ fn read_m4a_tags(path: &PathBuf) -> Result<TrackMeta> {
     let title = tag.title().unwrap_or("Unknown Title").to_string();
     let artist = tag.artist().unwrap_or("Unknown Artist").to_string();
     let album = tag.album().map(|s| s.to_string());
+    let comment = tag
+        .comment()
+        .map(|s| s.to_string())
+        .filter(|s| !s.is_empty());
 
     let artwork = tag.artworks().next().map(|art| ArtworkData {
         data: art.data.to_vec(),
@@ -191,6 +205,7 @@ fn read_m4a_tags(path: &PathBuf) -> Result<TrackMeta> {
         title,
         artist,
         album,
+        comment,
         artwork,
     })
 }
