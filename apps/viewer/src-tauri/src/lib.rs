@@ -171,6 +171,15 @@ pub fn run() {
                         .build(),
                 )?;
             }
+
+            // メインウィンドウが閉じられたらアプリ全体を終了する
+            let main_window = app.get_webview_window("main").unwrap();
+            main_window.on_window_event(move |event| {
+                if let tauri::WindowEvent::Destroyed = event {
+                    std::process::exit(0);
+                }
+            });
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![start_watch, open_monitor])
