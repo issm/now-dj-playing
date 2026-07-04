@@ -6,6 +6,7 @@ export interface TrackPayload {
   title: string;
   artist: string;
   album: string | null;
+  comment: string | null;
   artworkPath: string | null;
   updatedAt: string;
 }

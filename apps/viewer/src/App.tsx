@@ -110,6 +110,9 @@ function TrackDisplay({ track }: { track: TrackPayload }) {
                         {track.album && (
                             <p className="mt-4 text-base text-gray-500 md:text-lg">{track.album}</p>
                         )}
+                        {import.meta.env.VITE_ENABLE_COMMENTS === "1" && track.comment && (
+                            <p className="mt-4 text-base text-gray-400 md:text-lg">{track.comment}</p>
+                        )}
                     </div>
                 </div>
             </main>

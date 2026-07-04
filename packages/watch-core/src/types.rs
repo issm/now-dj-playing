@@ -16,6 +16,7 @@ pub struct NowPlaying {
     pub artist: String,
     pub album: Option<String>,
     pub artwork: Option<String>,
+    pub comment: Option<String>,
     pub updated_at: DateTime<FixedOffset>,
 }
 
