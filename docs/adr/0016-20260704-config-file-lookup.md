@@ -41,7 +41,9 @@ viewer アプリはこれまで Vite の環境変数（`VITE_WATCH_DIR`, `VITE_D
 以下の順序で設定ファイルを探索し、最初に見つかったものを使用する:
 
 1. 環境変数 `NDP_CONFIG` で指定されたパスのファイル
-2. 実行バイナリに隣接する `ndp.config.json`
+2. アプリ隣接の `ndp.config.json`
+   - 非バンドル時: 実行バイナリと同じディレクトリ
+   - macOS `.app` バンドル時: `.app/Contents/MacOS/` に加え、`.app` が配置されたディレクトリも探索する
 3. `$HOME/.config/ndp/config.json`
 4. いずれも見つからない場合はエラーとする（デフォルト値でのフォールバックは行わない）
 

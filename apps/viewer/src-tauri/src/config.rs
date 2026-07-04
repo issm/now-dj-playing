@@ -36,7 +36,7 @@ pub fn load_config() -> Result<AppConfig, String> {
 /// ルックアップ順に設定ファイルを探索し、最初に見つかったパスを返す
 ///
 /// 1. 環境変数 NDP_CONFIG
-/// 2. 実行バイナリ隣接の ndp.config.json
+/// 2. アプリ隣接の ndp.config.json
 /// 3. $HOME/.config/ndp/config.json
 fn lookup_config_file() -> Result<PathBuf, String> {
     // 1. 環境変数 NDP_CONFIG
@@ -51,10 +51,12 @@ fn lookup_config_file() -> Result<PathBuf, String> {
         ));
     }
 
-    // 2. 実行バイナリ隣接の ndp.config.json
+    // 2. アプリ隣接の ndp.config.json
+    //    macOS .app バンドルの場合: .app/Contents/MacOS/binary → .app の親ディレクトリを探索
+    //    非バンドルの場合: バイナリと同じディレクトリを探索
     if let Ok(exe_path) = env::current_exe() {
-        if let Some(exe_dir) = exe_path.parent() {
-            let adjacent = exe_dir.join("ndp.config.json");
+        for dir in app_adjacent_dirs(&exe_path) {
+            let adjacent = dir.join("ndp.config.json");
             if adjacent.is_file() {
                 return Ok(adjacent);
             }
@@ -100,4 +102,30 @@ fn merge_config(file: AppConfigFile, config_path: &PathBuf) -> AppConfig {
 /// ホームディレクトリを取得するヘルパー
 fn dirs_home() -> Option<PathBuf> {
     env::var("HOME").ok().map(PathBuf::from)
+}
+
+/// アプリ隣接ディレクトリの候補を返す
+///
+/// macOS の .app バンドルの場合、バイナリは `Foo.app/Contents/MacOS/binary` にあるため、
+/// `.app` の親ディレクトリも探索対象に含める。
+fn app_adjacent_dirs(exe_path: &PathBuf) -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+
+    // バイナリ自身のディレクトリ（非バンドル時やデバッグビルド時）
+    if let Some(exe_dir) = exe_path.parent() {
+        dirs.push(exe_dir.to_path_buf());
+
+        // macOS .app バンドル検出: .../Foo.app/Contents/MacOS/binary
+        // → Contents/MacOS の 2 階層上が .app ディレクトリ
+        if exe_dir.ends_with("Contents/MacOS") {
+            if let Some(app_dir) = exe_dir.parent().and_then(|p| p.parent()) {
+                // .app バンドルの親ディレクトリを追加
+                if let Some(app_parent) = app_dir.parent() {
+                    dirs.push(app_parent.to_path_buf());
+                }
+            }
+        }
+    }
+
+    dirs
 }

@@ -70,15 +70,34 @@ cargo build
 ```sh
 cd apps/viewer
 
-# .env.development を作成 (.env.example を参照)
-cp .env.example .env.development
-# VITE_WATCH_DIR と VITE_DEFAULT_DJ_ID を設定
+# 開発用設定ファイルを作成
+cp src-tauri/config/development.json.example src-tauri/config/development.json
+# development.json の watch_dir, dj_id を環境に合わせて編集
 
 # 開発サーバー起動
 cargo tauri dev
 ```
 
-`VITE_WATCH_DIR` はベースディレクトリを指定する。viewer は起動時にこのディレクトリを自動作成し、再帰的に監視する。`VITE_DEFAULT_DJ_ID` で指定した DJ ディレクトリが後から作成されても検知する（起動順序に依存しない）。
+設定ファイルは `.envrc` の `NDP_CONFIG` 環境変数で指定されたパスから読み込まれる。設定ファイルの探索順序やスキーマについては [ADR-0016](docs/adr/0016-20260704-config-file-lookup.md) を参照。
+
+#### 設定ファイル (`ndp.config.json`)
+
+```jsonc
+{
+  // 監視対象ディレクトリ（~ はホームディレクトリに展開される）
+  "watch_dir": "~/ndp",
+  "dj_id": "dj-000",
+  "enable_comments": false
+}
+```
+
+| キー | デフォルト値 | 説明 |
+|---|---|---|
+| `watch_dir` | `~/ndp` | 監視対象ベースディレクトリ |
+| `dj_id` | `"dj-000"` | 対象 DJ ディレクトリ名 |
+| `enable_comments` | `false` | コメント表示の初期状態 |
+
+viewer は起動時に `watch_dir` を自動作成し、再帰的に監視する。`dj_id` で指定した DJ ディレクトリが後から作成されても検知する（起動順序に依存しない）。
 
 ### Publisher (書き出しツール)
 
