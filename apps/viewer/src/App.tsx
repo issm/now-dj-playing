@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react";
-import { listen } from "@tauri-apps/api/event";
+import { useEffect, useRef, useState } from "react";
+import { listen, emitTo } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { convertFileSrc } from "@tauri-apps/api/core";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import type { TrackPayload } from "./types";
 import { parseComment, type ParsedComment } from "./commentParser";
+import MonitorView from "./MonitorView";
 
 function App() {
     const [track, setTrack] = useState<TrackPayload | null>(null);
@@ -12,13 +14,39 @@ function App() {
         import.meta.env.VITE_ENABLE_COMMENTS === "1",
     );
     const [showShortcuts, setShowShortcuts] = useState(false);
+    const trackRef = useRef<TrackPayload | null>(null);
 
-    // キーボードショートカット
+    const windowLabel = getCurrentWebviewWindow().label;
+    const isMonitor = windowLabel === "monitor";
+
+    // trackRef を最新の track に追従させる
     useEffect(() => {
+        trackRef.current = track;
+    }, [track]);
+
+    // キーボードショートカット（メインウィンドウのみ）
+    useEffect(() => {
+        if (isMonitor) return;
+
         const handleKeyDown = (e: KeyboardEvent) => {
             switch (e.key) {
                 case "c":
                     setShowComments((prev) => !prev);
+                    break;
+                case "m":
+                    invoke("open_monitor")
+                        .then(() => {
+                            // モニタウィンドウが開いた直後に現在のトラック情報を転送
+                            if (trackRef.current) {
+                                // 少し待ってからイベントリスナー登録後に送る
+                                setTimeout(() => {
+                                    emitTo("monitor", "monitor-track", trackRef.current);
+                                }, 100);
+                            }
+                        })
+                        .catch((err) => {
+                            console.error("モニタウィンドウの起動に失敗:", err);
+                        });
                     break;
                 case "?":
                     setShowShortcuts((prev) => !prev);
@@ -30,9 +58,21 @@ function App() {
         };
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
-    }, []);
+    }, [isMonitor]);
 
     useEffect(() => {
+        if (isMonitor) {
+            // モニタウィンドウ: メインから転送されたトラック情報を受信
+            const unlistenMonitorTrack = listen<TrackPayload>("monitor-track", (event) => {
+                setTrack(event.payload);
+            });
+
+            return () => {
+                unlistenMonitorTrack.then((fn) => fn());
+            };
+        }
+
+        // メインウィンドウ: watcher を開始し、トラック情報をモニタに転送
         const baseDir = import.meta.env.VITE_WATCH_DIR;
 
         if (!baseDir) {
@@ -49,6 +89,8 @@ function App() {
         const unlistenTrack = listen<TrackPayload>("track-changed", (event) => {
             setTrack(event.payload);
             setError(null);
+            // モニタウィンドウに転送（存在しなくてもエラーにはならない）
+            emitTo("monitor", "monitor-track", event.payload);
         });
 
         const unlistenError = listen<{ dirName: string; message: string }>(
@@ -62,7 +104,12 @@ function App() {
             unlistenTrack.then((fn) => fn());
             unlistenError.then((fn) => fn());
         };
-    }, []);
+    }, [isMonitor]);
+
+    // モニタウィンドウの場合はコンパクト表示
+    if (isMonitor) {
+        return <MonitorView track={track} />;
+    }
 
     return (
         <div className="flex h-screen flex-col items-center justify-center overflow-hidden bg-black text-white">
@@ -82,6 +129,7 @@ function App() {
 function ShortcutOverlay({ onClose }: { onClose: () => void }) {
     const shortcuts = [
         { key: "c", description: "コメント表示のトグル" },
+        { key: "m", description: "モニタウィンドウを開く" },
         { key: "?", description: "ショートカット一覧の表示" },
         { key: "Esc", description: "オーバーレイを閉じる" },
     ];
