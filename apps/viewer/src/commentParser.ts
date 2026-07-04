@@ -18,8 +18,13 @@ export interface GenericComment {
 
 export type ParsedComment = AnisonComment | GenericComment;
 
-/** カテゴリとして認識するパターン (OP, ED, IN, IM + 数字/サフィックス) */
-const CATEGORY_PATTERN = /^(OP|ED|IN|IM|OPx|EDx|IMx)(\d+|#\d+(-\d+)?|x)?$/i;
+/** カテゴリとして認識するパターン (OP, ED, IN, IM + オプショナルな x/数字/#数字) */
+const CATEGORY_PATTERN =
+  /^(OP|ED|IN|IM)(x|\d+x?)?(#\d+(-\d+)?(,\d+)*)?$/i;
+
+/** カンマ区切りの複合カテゴリ判定 (例: "ED#18-19,BD#12-13") */
+const COMPOUND_CATEGORY_PATTERN =
+  /^((OP|ED|IN|IM)(x|\d+x?)?(#\d+(-\d+)?(,\d+)*)?)(,((OP|ED|IN|IM)(x|\d+x?)?(#\d+(-\d+)?(,\d+)*)?))*$/i;
 
 /** 年代系タグの判定: 数字4桁を含む */
 const YEAR_TAG_PATTERN = /\d{4}/;
@@ -32,12 +37,18 @@ export function parseComment(raw: string): ParsedComment | null {
   const trimmed = raw.trim();
   if (!trimmed) return null;
 
-  // タグ部分とプレフィックス部分を分離
-  const firstHashIndex = trimmed.indexOf("#");
-  if (firstHashIndex === -1) return null;
+  // `/` 区切りの複数エントリがある場合、最初のエントリのみ採用
+  const entry = trimmed.split(/\s+\/\s+/)[0]?.trim();
+  if (!entry) return null;
 
-  const prefix = trimmed.slice(0, firstHashIndex).trim();
-  const tagsPart = trimmed.slice(firstHashIndex);
+  // タグの開始位置を特定: 空白の直後に # が来る最初の位置
+  // カテゴリ内の # (例: IN#5) と区別するため
+  const tagStartMatch = entry.match(/(?:^|\s)(#\S)/);
+  if (!tagStartMatch) return null;
+
+  const tagStartIndex = entry.indexOf(tagStartMatch[0]) + tagStartMatch[0].indexOf("#");
+  const prefix = entry.slice(0, tagStartIndex).trim();
+  const tagsPart = entry.slice(tagStartIndex);
 
   // タグを抽出 (#で始まる連続非空白文字)
   const tagMatches = tagsPart.match(/#[^\s#]+/g);
@@ -97,12 +108,9 @@ function parsePrefix(prefix: string): {
   }
 
   // カンマ区切りの複合カテゴリ (例: "ED#18-19,BD#12-13")
-  if (lastToken.includes(",")) {
-    const parts = lastToken.split(",");
-    if (parts.every((p) => CATEGORY_PATTERN.test(p.trim()))) {
-      const source = tokens.slice(0, -1).join(" ") || undefined;
-      return { source, category: lastToken };
-    }
+  if (lastToken.includes(",") && COMPOUND_CATEGORY_PATTERN.test(lastToken)) {
+    const source = tokens.slice(0, -1).join(" ") || undefined;
+    return { source, category: lastToken };
   }
 
   // カテゴリなし → 全体が source
