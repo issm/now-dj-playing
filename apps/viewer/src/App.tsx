@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { listen, emitTo } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { convertFileSrc } from "@tauri-apps/api/core";
@@ -7,23 +7,51 @@ import type { TrackPayload, AppConfig } from "./types";
 import { parseComment, type ParsedComment } from "./commentParser";
 import MonitorView from "./MonitorView";
 
+/** success アラートの自動非表示までの時間 (ms) */
+const INFO_AUTO_DISMISS_MS = 30_000;
+
 function App() {
     const [track, setTrack] = useState<TrackPayload | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [infoMessage, setInfoMessage] = useState<string | null>(null);
+    const [infoDismissing, setInfoDismissing] = useState(false);
     const [showComments, setShowComments] = useState(false);
     const [showShortcuts, setShowShortcuts] = useState(false);
     const [reloading, setReloading] = useState(false);
     const trackRef = useRef<TrackPayload | null>(null);
+    const infoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const windowLabel = getCurrentWebviewWindow().label;
     const isMonitor = windowLabel === "monitor";
+
+    // info アラートを閉じる（スライドアップアニメーション付き）
+    const dismissInfo = useCallback(() => {
+        setInfoDismissing(true);
+        setTimeout(() => {
+            setInfoMessage(null);
+            setInfoDismissing(false);
+        }, 300); // アニメーション duration に合わせる
+    }, []);
+
+    // info メッセージが設定されたら 30 秒後に自動で閉じる
+    useEffect(() => {
+        if (infoMessage && !infoDismissing) {
+            infoTimerRef.current = setTimeout(dismissInfo, INFO_AUTO_DISMISS_MS);
+            return () => {
+                if (infoTimerRef.current) {
+                    clearTimeout(infoTimerRef.current);
+                    infoTimerRef.current = null;
+                }
+            };
+        }
+    }, [infoMessage, infoDismissing, dismissInfo]);
 
     // 設定を再読み込みして watcher を起動する
     const handleReloadConfig = async () => {
         setReloading(true);
         setError(null);
         setInfoMessage(null);
+        setInfoDismissing(false);
         try {
             const config = await invoke<AppConfig>("reload_config");
             setInfoMessage(`${config.configPath} を読み込みました`);
@@ -141,12 +169,15 @@ function App() {
 
     return (
         <div className="flex h-screen flex-col items-center justify-center overflow-hidden bg-black text-white">
-            {/* success アラート（上部固定、スライドダウン） */}
+            {/* success アラート（上部固定、スライドダウン/アップ） */}
             {infoMessage && (
-                <div className="absolute left-0 right-0 top-0 z-40 flex animate-slide-down items-center justify-between bg-green-900/80 px-4 py-2 text-sm text-green-200">
+                <div
+                    className={`absolute left-0 right-0 top-0 z-40 flex items-center justify-between bg-green-900/80 px-4 py-2 text-sm text-green-200 ${infoDismissing ? "animate-slide-up" : "animate-slide-down"
+                        }`}
+                >
                     <span>{infoMessage}</span>
                     <button
-                        onClick={() => setInfoMessage(null)}
+                        onClick={dismissInfo}
                         className="ml-4 text-green-300 hover:text-white"
                         aria-label="閉じる"
                     >
