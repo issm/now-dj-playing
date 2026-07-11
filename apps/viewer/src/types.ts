@@ -23,6 +23,10 @@ export interface AppConfig {
   djId: string;
   enableComments: boolean;
   showTags: boolean;
+  /** イベント名（省略時は null） */
+  eventName: string | null;
+  /** イベント名を表示するかどうか（デフォルト: true） */
+  showEventName: boolean;
   configPath: string;
 }
 

@@ -10,6 +10,8 @@ pub struct AppConfigFile {
     pub dj_id: Option<String>,
     pub enable_comments: Option<bool>,
     pub show_tags: Option<bool>,
+    pub event_name: Option<String>,
+    pub show_event_name: Option<bool>,
 }
 
 /// アプリケーション設定（デフォルト値が適用済み）
@@ -20,6 +22,10 @@ pub struct AppConfig {
     pub dj_id: String,
     pub enable_comments: bool,
     pub show_tags: bool,
+    /// イベント名（省略時は None）
+    pub event_name: Option<String>,
+    /// イベント名を表示するかどうか（デフォルト: true）
+    pub show_event_name: bool,
     /// 読み込まれた設定ファイルのフルパス
     pub config_path: String,
 }
@@ -98,6 +104,8 @@ fn merge_config(file: AppConfigFile, config_path: &PathBuf) -> AppConfig {
         dj_id: file.dj_id.unwrap_or_else(|| "dj-000".to_string()),
         enable_comments: file.enable_comments.unwrap_or(false),
         show_tags: file.show_tags.unwrap_or(true),
+        event_name: file.event_name,
+        show_event_name: file.show_event_name.unwrap_or(true),
         config_path: config_path.display().to_string(),
     }
 }
