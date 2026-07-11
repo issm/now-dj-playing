@@ -2,8 +2,11 @@
   // 監視対象ディレクトリ（~ はホームディレクトリに展開される）
   "watch_dir": "/tmp/ndp",
   "dj_id": "dj-000",
-  "event_name": "イベント名",
-  "show_event_name": true,
+  "event_name": "Club Night vol.3",
+  // 背景画像のパス（~ はホームディレクトリに展開される）
+  "background_image": "/path/to/background.png",
   "enable_comments": false,
-  "show_tags": true
+  "show_tags": true,
+  // 背景画像を表示するかどうか（デフォルト: true）
+  "show_background_image": true
 }

@@ -21,6 +21,8 @@ function App() {
     const [reloading, setReloading] = useState(false);
     const [eventName, setEventName] = useState<string | null>(null);
     const [showEventName, setShowEventName] = useState(true);
+    const [backgroundImage, setBackgroundImage] = useState<string | null>(null);
+    const [showBackgroundImage, setShowBackgroundImage] = useState(true);
     const trackRef = useRef<TrackPayload | null>(null);
     const infoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -49,6 +51,17 @@ function App() {
         }
     }, [infoMessage, infoDismissing, dismissInfo]);
 
+    // 設定から背景画像関連の状態を反映するヘルパー
+    const applyConfig = (config: AppConfig) => {
+        setInfoMessage(`${config.configPath} を読み込みました`);
+        setShowComments(config.enableComments);
+        setShowTags(config.showTags);
+        setEventName(config.eventName);
+        setShowEventName(config.showEventName);
+        setBackgroundImage(config.backgroundImage);
+        setShowBackgroundImage(config.showBackgroundImage);
+    };
+
     // 設定を再読み込みして watcher を起動する
     const handleReloadConfig = async () => {
         setReloading(true);
@@ -57,11 +70,7 @@ function App() {
         setInfoDismissing(false);
         try {
             const config = await invoke<AppConfig>("reload_config");
-            setInfoMessage(`${config.configPath} を読み込みました`);
-            setShowComments(config.enableComments);
-            setShowTags(config.showTags);
-            setEventName(config.eventName);
-            setShowEventName(config.showEventName);
+            applyConfig(config);
             await invoke("start_watch");
         } catch (err) {
             setError(String(err));
@@ -81,6 +90,9 @@ function App() {
 
         const handleKeyDown = (e: KeyboardEvent) => {
             switch (e.key) {
+                case "b":
+                    setShowBackgroundImage((prev) => !prev);
+                    break;
                 case "c":
                     setShowComments((prev) => !prev);
                     break;
@@ -138,14 +150,7 @@ function App() {
 
                 if (cancelled) return;
 
-                // 設定ファイルのパスを success 表示
-                setInfoMessage(`${config.configPath} を読み込みました`);
-
-                // 設定に基づいて初期値を反映
-                setShowComments(config.enableComments);
-                setShowTags(config.showTags);
-                setEventName(config.eventName);
-                setShowEventName(config.showEventName);
+                applyConfig(config);
 
                 // watcher を開始
                 await invoke("start_watch");
@@ -183,7 +188,20 @@ function App() {
     }
 
     return (
-        <div className="flex h-screen flex-col items-center justify-center overflow-hidden bg-black text-white">
+        <div className="relative flex h-screen flex-col items-center justify-center overflow-hidden bg-black text-white">
+            {/* 背景画像レイヤー */}
+            {backgroundImage && showBackgroundImage && (
+                <div
+                    className="absolute inset-0 z-0"
+                    style={{
+                        backgroundImage: `url(${convertFileSrc(backgroundImage)})`,
+                        backgroundSize: "cover",
+                        backgroundPosition: "center",
+                        backgroundRepeat: "no-repeat",
+                        opacity: 0.15,
+                    }}
+                />
+            )}
             {/* success アラート（上部固定、スライドダウン/アップ） */}
             {infoMessage && (
                 <div
@@ -215,7 +233,9 @@ function App() {
                 </div>
             )}
 
-            {track ? <TrackDisplay track={track} eventName={showEventName ? eventName : null} showComments={showComments} showTags={showTags} /> : <WaitingScreen />}
+            <div className="relative z-10 flex h-full w-full flex-col items-center justify-center">
+                {track ? <TrackDisplay track={track} eventName={showEventName ? eventName : null} showComments={showComments} showTags={showTags} /> : <WaitingScreen />}
+            </div>
 
             {showShortcuts && <ShortcutOverlay onClose={() => setShowShortcuts(false)} />}
 
@@ -235,6 +255,7 @@ function VersionDisplay() {
 
 function ShortcutOverlay({ onClose }: { onClose: () => void }) {
     const shortcuts = [
+        { key: "b", description: "背景画像表示のトグル" },
         { key: "c", description: "コメント表示のトグル" },
         { key: "t", description: "タグ表示のトグル" },
         { key: "e", description: "イベント名表示のトグル" },
