@@ -8,7 +8,7 @@ import { parseComment, type ParsedComment } from "./commentParser";
 import MonitorView from "./MonitorView";
 
 /** success アラートの自動非表示までの時間 (ms) */
-const INFO_AUTO_DISMISS_MS = 30_000;
+const INFO_AUTO_DISMISS_MS = 10_000;
 
 function App() {
     const [track, setTrack] = useState<TrackPayload | null>(null);
