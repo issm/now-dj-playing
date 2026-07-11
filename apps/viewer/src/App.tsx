@@ -19,6 +19,8 @@ function App() {
     const [showTags, setShowTags] = useState(true);
     const [showShortcuts, setShowShortcuts] = useState(false);
     const [reloading, setReloading] = useState(false);
+    const [eventName, setEventName] = useState<string | null>(null);
+    const [showEventName, setShowEventName] = useState(true);
     const trackRef = useRef<TrackPayload | null>(null);
     const infoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -58,6 +60,8 @@ function App() {
             setInfoMessage(`${config.configPath} を読み込みました`);
             setShowComments(config.enableComments);
             setShowTags(config.showTags);
+            setEventName(config.eventName);
+            setShowEventName(config.showEventName);
             await invoke("start_watch");
         } catch (err) {
             setError(String(err));
@@ -82,6 +86,9 @@ function App() {
                     break;
                 case "t":
                     setShowTags((prev) => !prev);
+                    break;
+                case "e":
+                    setShowEventName((prev) => !prev);
                     break;
                 case "m":
                     invoke("open_monitor")
@@ -137,6 +144,8 @@ function App() {
                 // 設定に基づいて初期値を反映
                 setShowComments(config.enableComments);
                 setShowTags(config.showTags);
+                setEventName(config.eventName);
+                setShowEventName(config.showEventName);
 
                 // watcher を開始
                 await invoke("start_watch");
@@ -206,7 +215,7 @@ function App() {
                 </div>
             )}
 
-            {track ? <TrackDisplay track={track} showComments={showComments} showTags={showTags} /> : <WaitingScreen />}
+            {track ? <TrackDisplay track={track} eventName={showEventName ? eventName : null} showComments={showComments} showTags={showTags} /> : <WaitingScreen />}
 
             {showShortcuts && <ShortcutOverlay onClose={() => setShowShortcuts(false)} />}
 
@@ -228,6 +237,7 @@ function ShortcutOverlay({ onClose }: { onClose: () => void }) {
     const shortcuts = [
         { key: "c", description: "コメント表示のトグル" },
         { key: "t", description: "タグ表示のトグル" },
+        { key: "e", description: "イベント名表示のトグル" },
         { key: "m", description: "モニタウィンドウを開く" },
         { key: "?", description: "ショートカット一覧の表示" },
         { key: "Esc", description: "オーバーレイを閉じる" },
@@ -267,7 +277,7 @@ function WaitingScreen() {
     );
 }
 
-function TrackDisplay({ track, showComments, showTags }: { track: TrackPayload; showComments: boolean; showTags: boolean }) {
+function TrackDisplay({ track, eventName, showComments, showTags }: { track: TrackPayload; eventName: string | null; showComments: boolean; showTags: boolean }) {
     const djDisplay = track.djName ?? track.dirName;
     const cacheBuster = `?t=${encodeURIComponent(track.updatedAt)}`;
     const artworkSrc = track.artworkPath
@@ -279,8 +289,15 @@ function TrackDisplay({ track, showComments, showTags }: { track: TrackPayload; 
 
     return (
         <div className="flex h-full w-full flex-col">
+            {/* イベント名 */}
+            {eventName && (
+                <div className="shrink-0 pt-4 text-center">
+                    <span className="text-sm text-gray-400 md:text-base">{eventName}</span>
+                </div>
+            )}
+
             {/* ヘッダ: DJ 情報 */}
-            <header className="flex h-[15vh] shrink-0 items-center justify-center gap-3 px-8">
+            <header className="flex h-[100px] shrink-0 items-center justify-center gap-3 px-8">
                 {djLogoSrc ? (
                     <img
                         src={djLogoSrc}
