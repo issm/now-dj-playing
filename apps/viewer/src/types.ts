@@ -27,6 +27,10 @@ export interface AppConfig {
   eventName: string | null;
   /** イベント名を表示するかどうか（デフォルト: true） */
   showEventName: boolean;
+  /** 背景画像のパス（省略時は null） */
+  backgroundImage: string | null;
+  /** 背景画像を表示するかどうか（デフォルト: true） */
+  showBackgroundImage: boolean;
   configPath: string;
 }
 

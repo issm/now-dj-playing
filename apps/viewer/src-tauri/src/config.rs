@@ -12,6 +12,10 @@ pub struct AppConfigFile {
     pub show_tags: Option<bool>,
     pub event_name: Option<String>,
     pub show_event_name: Option<bool>,
+    /// 背景画像のパス（~ はホームディレクトリに展開される）
+    pub background_image: Option<String>,
+    /// 背景画像を表示するかどうか（デフォルト: true）
+    pub show_background_image: Option<bool>,
 }
 
 /// アプリケーション設定（デフォルト値が適用済み）
@@ -26,6 +30,10 @@ pub struct AppConfig {
     pub event_name: Option<String>,
     /// イベント名を表示するかどうか（デフォルト: true）
     pub show_event_name: bool,
+    /// 背景画像のパス（省略時は None）
+    pub background_image: Option<String>,
+    /// 背景画像を表示するかどうか（デフォルト: true）
+    pub show_background_image: bool,
     /// 読み込まれた設定ファイルのフルパス
     pub config_path: String,
 }
@@ -99,6 +107,11 @@ fn merge_config(file: AppConfigFile, config_path: &PathBuf) -> AppConfig {
     // ~ をホームディレクトリに展開
     let watch_dir = shellexpand::tilde(&watch_dir_raw).to_string();
 
+    // 背景画像パスも ~ を展開
+    let background_image = file
+        .background_image
+        .map(|raw| shellexpand::tilde(&raw).to_string());
+
     AppConfig {
         watch_dir,
         dj_id: file.dj_id.unwrap_or_else(|| "dj-000".to_string()),
@@ -106,6 +119,8 @@ fn merge_config(file: AppConfigFile, config_path: &PathBuf) -> AppConfig {
         show_tags: file.show_tags.unwrap_or(true),
         event_name: file.event_name,
         show_event_name: file.show_event_name.unwrap_or(true),
+        background_image,
+        show_background_image: file.show_background_image.unwrap_or(true),
         config_path: config_path.display().to_string(),
     }
 }
