@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// 設定ファイルのスキーマ（JSONC でパースされる）
 #[derive(Debug, Clone, Deserialize)]
@@ -100,17 +100,19 @@ fn read_config_file(path: &PathBuf) -> Result<AppConfigFile, String> {
 
 /// ファイルの設定値をデフォルト値にマージする
 fn merge_config(file: AppConfigFile, config_path: &PathBuf) -> AppConfig {
+    // 設定ファイルの親ディレクトリ（相対パス解決の基準）
+    let config_dir = config_path.parent().unwrap_or(Path::new("."));
+
     let watch_dir_raw = file.watch_dir.unwrap_or_else(|| {
         let home = dirs_home().unwrap_or_else(|| "/tmp".into());
         home.join("ndp").display().to_string()
     });
-    // ~ をホームディレクトリに展開
-    let watch_dir = shellexpand::tilde(&watch_dir_raw).to_string();
+    let watch_dir = resolve_path(&watch_dir_raw, config_dir);
 
-    // 背景画像パスも ~ を展開
+    // 背景画像パスも解決
     let background_image = file
         .background_image
-        .map(|raw| shellexpand::tilde(&raw).to_string());
+        .map(|raw| resolve_path(&raw, config_dir));
 
     AppConfig {
         watch_dir,
@@ -122,6 +124,24 @@ fn merge_config(file: AppConfigFile, config_path: &PathBuf) -> AppConfig {
         background_image,
         show_background_image: file.show_background_image.unwrap_or(true),
         config_path: config_path.display().to_string(),
+    }
+}
+
+/// パス文字列を解決する
+///
+/// 1. `~` で始まる場合はホームディレクトリに展開する
+/// 2. 展開後のパスが相対パスの場合、`base_dir` を基準に解決する
+/// 3. 絶対パスの場合はそのまま返す
+fn resolve_path(raw: &str, base_dir: &Path) -> String {
+    // ~ をホームディレクトリに展開
+    let expanded = shellexpand::tilde(raw).to_string();
+    let path = Path::new(&expanded);
+
+    if path.is_absolute() {
+        expanded
+    } else {
+        // 相対パスは設定ファイルのディレクトリを基準に解決
+        base_dir.join(path).display().to_string()
     }
 }
 
