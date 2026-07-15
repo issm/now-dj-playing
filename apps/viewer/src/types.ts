@@ -17,6 +17,22 @@ export interface ErrorPayload {
   message: string;
 }
 
+/** 背景画像設定 */
+export interface BackgroundImageConfig {
+  /** 背景画像ディレクトリの絶対パス */
+  baseDir: string;
+  /** base_dir からの相対パス（null で「なし」） */
+  path: string | null;
+}
+
+/** 背景画像一覧のエントリ */
+export interface BackgroundImageEntry {
+  /** base_dir からの相対パス（ファイル名） */
+  path: string;
+  /** 絶対パス（convertFileSrc 用） */
+  absolutePath: string;
+}
+
 /** Rust 側から返されるアプリ設定 */
 export interface AppConfig {
   watchDir: string;
@@ -27,10 +43,8 @@ export interface AppConfig {
   eventName: string | null;
   /** イベント名を表示するかどうか（デフォルト: true） */
   showEventName: boolean;
-  /** 背景画像のパス（省略時は null） */
-  backgroundImage: string | null;
-  /** 背景画像を表示するかどうか（デフォルト: true） */
-  showBackgroundImage: boolean;
+  /** 背景画像設定（省略時は null = 機能無効） */
+  backgroundImage: BackgroundImageConfig | null;
   configPath: string;
 }
 

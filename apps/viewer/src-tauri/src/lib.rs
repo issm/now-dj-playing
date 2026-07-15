@@ -67,6 +67,16 @@ pub struct VersionInfo {
     pub full: String,
 }
 
+/// 背景画像一覧のレスポンス
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BackgroundImageEntry {
+    /// base_dir からの相対パス（ファイル名）
+    pub path: String,
+    /// 絶対パス（convertFileSrc 用）
+    pub absolute_path: String,
+}
+
 /// フロントエンドに設定を返すコマンド
 #[tauri::command]
 fn get_app_config() -> Result<AppConfig, String> {
@@ -96,6 +106,69 @@ fn get_version_info() -> VersionInfo {
         commit_hash,
         full,
     }
+}
+
+/// 背景画像ディレクトリ内の画像ファイル一覧を返すコマンド（再帰的に探索）
+#[tauri::command]
+fn list_background_images() -> Result<Vec<BackgroundImageEntry>, String> {
+    let config = get_or_init_config()?;
+
+    let bg_config = config
+        .background_image
+        .ok_or_else(|| "背景画像ディレクトリが未設定です".to_string())?;
+
+    let base_dir = PathBuf::from(&bg_config.base_dir);
+    if !base_dir.is_dir() {
+        return Err(format!(
+            "背景画像ディレクトリが見つかりません: {}",
+            bg_config.base_dir
+        ));
+    }
+
+    let supported_extensions = ["png", "jpg", "jpeg", "webp"];
+    let mut entries: Vec<BackgroundImageEntry> = Vec::new();
+
+    fn collect_images(
+        dir: &PathBuf,
+        base_dir: &PathBuf,
+        extensions: &[&str],
+        entries: &mut Vec<BackgroundImageEntry>,
+    ) -> Result<(), String> {
+        let read_dir =
+            std::fs::read_dir(dir).map_err(|e| format!("ディレクトリの読み込みに失敗: {}", e))?;
+
+        for entry in read_dir.filter_map(|e| e.ok()) {
+            let path = entry.path();
+            if path.is_dir() {
+                collect_images(&path, base_dir, extensions, entries)?;
+            } else if path.is_file() {
+                let is_image = path
+                    .extension()
+                    .and_then(|ext| ext.to_str())
+                    .map(|ext| extensions.contains(&ext.to_lowercase().as_str()))
+                    .unwrap_or(false);
+                if is_image {
+                    let relative = path
+                        .strip_prefix(base_dir)
+                        .unwrap_or(&path)
+                        .to_string_lossy()
+                        .to_string();
+                    entries.push(BackgroundImageEntry {
+                        path: relative,
+                        absolute_path: path.display().to_string(),
+                    });
+                }
+            }
+        }
+        Ok(())
+    }
+
+    collect_images(&base_dir, &base_dir, &supported_extensions, &mut entries)?;
+
+    // パスでソート
+    entries.sort_by(|a, b| a.path.to_lowercase().cmp(&b.path.to_lowercase()));
+
+    Ok(entries)
 }
 
 /// 監視を開始するコマンド（設定はバックエンドから取得）
@@ -273,6 +346,7 @@ pub fn run() {
             reload_config,
             open_monitor,
             get_version_info,
+            list_background_images,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

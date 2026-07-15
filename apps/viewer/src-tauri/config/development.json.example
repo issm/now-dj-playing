@@ -3,10 +3,13 @@
   "watch_dir": "/tmp/ndp",
   "dj_id": "dj-000",
   "event_name": "Club Night vol.3",
-  // 背景画像のパス（~ はホームディレクトリに展開される）
-  "background_image": "/path/to/background.png",
   "enable_comments": false,
   "show_tags": true,
-  // 背景画像を表示するかどうか（デフォルト: true）
-  "show_background_image": true
+  // 背景画像設定
+  "background_image": {
+    // 背景画像を格納するディレクトリ（~ 展開・相対パス解決あり）
+    "base_dir": "~/apps/ndp/bg",
+    // base_dir からの相対パス（null で「なし」）
+    "path": "background.png"
+  }
 }
