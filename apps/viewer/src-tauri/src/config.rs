@@ -3,6 +3,25 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+/// 背景画像設定（設定ファイル側）
+#[derive(Debug, Clone, Deserialize)]
+pub struct BackgroundImageConfigFile {
+    /// 背景画像を格納するディレクトリ（~ 展開・相対パス解決あり）
+    pub base_dir: String,
+    /// base_dir からの相対パス（null で「なし」）
+    pub path: Option<String>,
+}
+
+/// 背景画像設定（解決済み・フロントエンドに送る形式）
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BackgroundImageConfig {
+    /// 背景画像ディレクトリの絶対パス
+    pub base_dir: String,
+    /// base_dir からの相対パス（null で「なし」）
+    pub path: Option<String>,
+}
+
 /// 設定ファイルのスキーマ（JSONC でパースされる）
 #[derive(Debug, Clone, Deserialize)]
 pub struct AppConfigFile {
@@ -12,10 +31,8 @@ pub struct AppConfigFile {
     pub show_tags: Option<bool>,
     pub event_name: Option<String>,
     pub show_event_name: Option<bool>,
-    /// 背景画像のパス（~ はホームディレクトリに展開される）
-    pub background_image: Option<String>,
-    /// 背景画像を表示するかどうか（デフォルト: true）
-    pub show_background_image: Option<bool>,
+    /// 背景画像設定（オブジェクト形式）
+    pub background_image: Option<BackgroundImageConfigFile>,
 }
 
 /// アプリケーション設定（デフォルト値が適用済み）
@@ -30,10 +47,8 @@ pub struct AppConfig {
     pub event_name: Option<String>,
     /// イベント名を表示するかどうか（デフォルト: true）
     pub show_event_name: bool,
-    /// 背景画像のパス（省略時は None）
-    pub background_image: Option<String>,
-    /// 背景画像を表示するかどうか（デフォルト: true）
-    pub show_background_image: bool,
+    /// 背景画像設定（省略時は None = 機能無効）
+    pub background_image: Option<BackgroundImageConfig>,
     /// 読み込まれた設定ファイルのフルパス
     pub config_path: String,
 }
@@ -109,10 +124,14 @@ fn merge_config(file: AppConfigFile, config_path: &PathBuf) -> AppConfig {
     });
     let watch_dir = resolve_path(&watch_dir_raw, config_dir);
 
-    // 背景画像パスも解決
-    let background_image = file
-        .background_image
-        .map(|raw| resolve_path(&raw, config_dir));
+    // 背景画像設定の解決
+    let background_image = file.background_image.map(|bg| {
+        let base_dir = resolve_path(&bg.base_dir, config_dir);
+        BackgroundImageConfig {
+            base_dir,
+            path: bg.path,
+        }
+    });
 
     AppConfig {
         watch_dir,
@@ -122,7 +141,6 @@ fn merge_config(file: AppConfigFile, config_path: &PathBuf) -> AppConfig {
         event_name: file.event_name,
         show_event_name: file.show_event_name.unwrap_or(true),
         background_image,
-        show_background_image: file.show_background_image.unwrap_or(true),
         config_path: config_path.display().to_string(),
     }
 }

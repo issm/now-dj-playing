@@ -3,9 +3,10 @@ import { listen, emitTo } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import type { TrackPayload, AppConfig } from "./types";
+import type { TrackPayload, AppConfig, BackgroundImageEntry, BackgroundImageConfig } from "./types";
 import { parseComment, type ParsedComment } from "./commentParser";
 import MonitorView from "./MonitorView";
+import BackgroundPicker from "./BackgroundPicker";
 
 /** success アラートの自動非表示までの時間 (ms) */
 const INFO_AUTO_DISMISS_MS = 10_000;
@@ -18,11 +19,16 @@ function App() {
     const [showComments, setShowComments] = useState(false);
     const [showTags, setShowTags] = useState(true);
     const [showShortcuts, setShowShortcuts] = useState(false);
+    const [showBackgroundPicker, setShowBackgroundPicker] = useState(false);
     const [reloading, setReloading] = useState(false);
     const [eventName, setEventName] = useState<string | null>(null);
     const [showEventName, setShowEventName] = useState(true);
-    const [backgroundImage, setBackgroundImage] = useState<string | null>(null);
-    const [showBackgroundImage, setShowBackgroundImage] = useState(true);
+    /** 背景画像設定（null = 機能無効） */
+    const [backgroundImageConfig, setBackgroundImageConfig] = useState<BackgroundImageConfig | null>(null);
+    /** 現在選択中の背景画像の相対パス（null = なし） */
+    const [backgroundImagePath, setBackgroundImagePath] = useState<string | null>(null);
+    /** 背景画像の絶対パス（表示用、null = なし） */
+    const [backgroundImageAbsolutePath, setBackgroundImageAbsolutePath] = useState<string | null>(null);
     const trackRef = useRef<TrackPayload | null>(null);
     const infoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -38,7 +44,7 @@ function App() {
         }, 300); // アニメーション duration に合わせる
     }, []);
 
-    // info メッセージが設定されたら 30 秒後に自動で閉じる
+    // info メッセージが設定されたら自動で閉じる
     useEffect(() => {
         if (infoMessage && !infoDismissing) {
             infoTimerRef.current = setTimeout(dismissInfo, INFO_AUTO_DISMISS_MS);
@@ -51,15 +57,28 @@ function App() {
         }
     }, [infoMessage, infoDismissing, dismissInfo]);
 
-    // 設定から背景画像関連の状態を反映するヘルパー
+    // 設定から状態を反映するヘルパー
     const applyConfig = (config: AppConfig) => {
         setInfoMessage(`${config.configPath} を読み込みました`);
         setShowComments(config.enableComments);
         setShowTags(config.showTags);
         setEventName(config.eventName);
         setShowEventName(config.showEventName);
-        setBackgroundImage(config.backgroundImage);
-        setShowBackgroundImage(config.showBackgroundImage);
+        setBackgroundImageConfig(config.backgroundImage);
+
+        if (config.backgroundImage) {
+            setBackgroundImagePath(config.backgroundImage.path);
+            if (config.backgroundImage.path) {
+                // base_dir + path で絶対パスを構築
+                const abs = `${config.backgroundImage.baseDir}/${config.backgroundImage.path}`;
+                setBackgroundImageAbsolutePath(abs);
+            } else {
+                setBackgroundImageAbsolutePath(null);
+            }
+        } else {
+            setBackgroundImagePath(null);
+            setBackgroundImageAbsolutePath(null);
+        }
     };
 
     // 設定を再読み込みして watcher を起動する
@@ -79,6 +98,18 @@ function App() {
         }
     };
 
+    // 背景画像選択ハンドラ
+    const handleBackgroundSelect = (entry: BackgroundImageEntry | null) => {
+        if (entry === null) {
+            setBackgroundImagePath(null);
+            setBackgroundImageAbsolutePath(null);
+        } else {
+            setBackgroundImagePath(entry.path);
+            setBackgroundImageAbsolutePath(entry.absolutePath);
+        }
+        setShowBackgroundPicker(false);
+    };
+
     // trackRef を最新の track に追従させる
     useEffect(() => {
         trackRef.current = track;
@@ -89,9 +120,24 @@ function App() {
         if (isMonitor) return;
 
         const handleKeyDown = (e: KeyboardEvent) => {
+            // BackgroundPicker が開いている場合は一切無視（自前でキー処理する）
+            if (showBackgroundPicker) return;
+
+            // ShortcutOverlay が開いている場合は Escape / ? のみ処理
+            if (showShortcuts) {
+                if (e.key === "Escape" || e.key === "?") {
+                    setShowShortcuts(false);
+                }
+                return;
+            }
+
             switch (e.key) {
                 case "b":
-                    setShowBackgroundImage((prev) => !prev);
+                    if (backgroundImageConfig) {
+                        setShowBackgroundPicker(true);
+                    } else {
+                        setInfoMessage("背景画像ディレクトリが未設定です");
+                    }
                     break;
                 case "c":
                     setShowComments((prev) => !prev);
@@ -127,7 +173,7 @@ function App() {
         };
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [isMonitor]);
+    }, [isMonitor, backgroundImageConfig, showBackgroundPicker, showShortcuts]);
 
     useEffect(() => {
         if (isMonitor) {
@@ -190,11 +236,11 @@ function App() {
     return (
         <div className="relative flex h-screen flex-col items-center justify-center overflow-hidden bg-black text-white">
             {/* 背景画像レイヤー */}
-            {backgroundImage && showBackgroundImage && (
+            {backgroundImageAbsolutePath && (
                 <div
                     className="absolute inset-0 z-0"
                     style={{
-                        backgroundImage: `url(${convertFileSrc(backgroundImage)})`,
+                        backgroundImage: `url(${convertFileSrc(backgroundImageAbsolutePath)})`,
                         backgroundSize: "cover",
                         backgroundPosition: "center",
                         backgroundRepeat: "no-repeat",
@@ -239,6 +285,14 @@ function App() {
 
             {showShortcuts && <ShortcutOverlay onClose={() => setShowShortcuts(false)} />}
 
+            {showBackgroundPicker && (
+                <BackgroundPicker
+                    currentPath={backgroundImagePath}
+                    onSelect={handleBackgroundSelect}
+                    onClose={() => setShowBackgroundPicker(false)}
+                />
+            )}
+
             {/* バージョン情報（右下固定） */}
             <VersionDisplay />
         </div>
@@ -255,7 +309,7 @@ function VersionDisplay() {
 
 function ShortcutOverlay({ onClose }: { onClose: () => void }) {
     const shortcuts = [
-        { key: "b", description: "背景画像表示のトグル" },
+        { key: "b", description: "背景画像の選択" },
         { key: "c", description: "コメント表示のトグル" },
         { key: "t", description: "タグ表示のトグル" },
         { key: "e", description: "イベント名表示のトグル" },
