@@ -132,6 +132,9 @@ function App() {
             }
 
             switch (e.key) {
+                case "r":
+                    handleReloadConfig();
+                    break;
                 case "b":
                     if (backgroundImageConfig) {
                         setShowBackgroundPicker(true);
@@ -309,6 +312,7 @@ function VersionDisplay() {
 
 function ShortcutOverlay({ onClose }: { onClose: () => void }) {
     const shortcuts = [
+        { key: "r", description: "設定ファイルの再読み込み" },
         { key: "b", description: "背景画像の選択" },
         { key: "c", description: "コメント表示のトグル" },
         { key: "t", description: "タグ表示のトグル" },
