@@ -41,11 +41,15 @@ ADR-0020 では、設定ファイルに単一の `background_image` パスを指
 
 ### 一覧 UI
 
-- `b` キーで開閉するオーバーレイ（既存の `ShortcutOverlay` と同様のパターン）
-- `base_dir` 内の画像ファイルをサムネイルグリッドで表示
+- `b` キーで開閉するオーバーレイ
+- オーバーレイサイズ: 80vw × 80vh
+- `base_dir` 内の画像ファイルを **再帰的に探索** し、サムネイルグリッド（4列）で表示
+- サムネイルのアスペクト比はウィンドウのアスペクト比に動的に追従する
+- ファイル名はマウスホバー時のみ省略なしで表示する
 - 対応形式: png, jpg, jpeg, webp
 - 先頭に「なし」の選択肢を配置
 - クリックで背景を即時変更
+- `Escape` または `b` キーでオーバーレイを閉じる
 
 ### 背景の表示方法
 
@@ -63,33 +67,41 @@ ADR-0020 では、設定ファイルに単一の `background_image` パスを指
 - `b` キーをトグルから一覧表示に変更した理由: 複数候補から選ぶ操作に統合することで、「表示/非表示」と「画像選択」の2つの操作を1つのキーに集約できる
 - `show_background_image` を廃止した理由: 「なし」を選択肢として含めることで、boolean による表示制御が不要になった
 - セッション限りとした理由: 設定ファイル書き戻しの仕組みを #28 で統一的に対応するため、本件では切り分ける
+- 再帰探索にした理由: サブディレクトリで画像をカテゴリ分けして管理するケースに対応するため
+- サムネイルのアスペクト比をウィンドウ比にした理由: 背景として実際にどう表示されるかをプレビューとして直感的に把握できる
 
 ## 影響
 
 ### Rust 側 (config.rs)
 
-- `AppConfigFile` の `background_image` フィールドを `Option<String>` から `Option<BackgroundImageConfig>` に変更
+- `AppConfigFile` の `background_image` フィールドを `Option<String>` から `Option<BackgroundImageConfigFile>` に変更
 - `show_background_image` フィールドを削除
-- `BackgroundImageConfig` 構造体を新設（`base_dir`, `path`）
+- `BackgroundImageConfigFile` 構造体を新設（設定ファイル側: `base_dir`, `path`）
+- `BackgroundImageConfig` 構造体を新設（解決済み・フロントエンド送信用: `base_dir`, `path`）
 - `AppConfig` の背景関連フィールドを更新
 
 ### Rust 側 (lib.rs)
 
-- 新コマンド `list_background_images`: `base_dir` 内の画像ファイル一覧を返す
+- 新コマンド `list_background_images`: `base_dir` 内の画像ファイル一覧を再帰的に探索して返す
+- `BackgroundImageEntry` 構造体を新設（`path`: 相対パス, `absolute_path`: 絶対パス）
 
 ### フロントエンド (types.ts)
 
 - `AppConfig` から `showBackgroundImage` を削除
-- `backgroundImage` を `{ baseDir: string; path: string | null }` 形式に変更（またはフラットに `backgroundImageBaseDir` + `backgroundImagePath`）
+- `backgroundImage` を `BackgroundImageConfig | null` 形式に変更
+- `BackgroundImageConfig` インターフェースを新設（`baseDir`, `path`）
+- `BackgroundImageEntry` インターフェースを新設（`path`, `absolutePath`）
 
 ### フロントエンド (App.tsx)
 
 - `b` キーの動作をトグルから一覧オーバーレイ表示に変更
 - `showBackgroundImage` state を削除
+- `backgroundImageConfig` / `backgroundImagePath` / `backgroundImageAbsolutePath` state を追加
 
 ### フロントエンド (新コンポーネント)
 
 - `BackgroundPicker.tsx`: サムネイルグリッドのオーバーレイコンポーネント
+  - `useWindowAspectRatio` hook でウィンドウ比に追従
 
 ### 設定ファイル
 
