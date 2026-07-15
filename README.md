@@ -72,7 +72,7 @@ cd apps/viewer
 
 # 開発用設定ファイルを作成
 cp src-tauri/config/development.json.example src-tauri/config/development.json
-# development.json の watch_dir, dj_id を環境に合わせて編集
+# development.json を環境に合わせて編集
 
 # 開発サーバー起動
 cargo tauri dev
@@ -87,7 +87,14 @@ cargo tauri dev
   // 監視対象ディレクトリ（~ はホームディレクトリに展開、相対パスは設定ファイル基準で解決）
   "watch_dir": "~/ndp",
   "dj_id": "dj-000",
-  "enable_comments": false
+  "event_name": "Club Night vol.3",
+  "enable_comments": true,
+  "show_tags": true,
+  // 背景画像設定
+  "background_image": {
+    "base_dir": "~/apps/ndp/bg",
+    "path": "background.png"
+  }
 }
 ```
 
@@ -95,7 +102,13 @@ cargo tauri dev
 |---|---|---|
 | `watch_dir` | `~/ndp` | 監視対象ベースディレクトリ |
 | `dj_id` | `"dj-000"` | 対象 DJ ディレクトリ名 |
+| `event_name` | *(なし)* | イベント名の表示テキスト |
+| `show_event_name` | `true` | イベント名の表示/非表示 |
 | `enable_comments` | `false` | コメント表示の初期状態 |
+| `show_tags` | `true` | タグ表示の初期状態 |
+| `background_image` | *(なし)* | 背景画像設定（オブジェクト） |
+| `background_image.base_dir` | - | 背景画像を格納するディレクトリ |
+| `background_image.path` | `null` | `base_dir` からの相対パス（`null` で「なし」） |
 
 パス指定は以下の形式に対応:
 - 絶対パス: `/tmp/ndp`
@@ -103,6 +116,18 @@ cargo tauri dev
 - 相対パス: `./data`（設定ファイルの配置ディレクトリ基準で解決）
 
 viewer は起動時に `watch_dir` を自動作成し、再帰的に監視する。`dj_id` で指定した DJ ディレクトリが後から作成されても検知する（起動順序に依存しない）。
+
+#### キーボードショートカット
+
+| キー | 説明 |
+|---|---|
+| `b` | 背景画像の選択（一覧オーバーレイを表示） |
+| `c` | コメント表示のトグル |
+| `t` | タグ表示のトグル |
+| `e` | イベント名表示のトグル |
+| `m` | モニタウィンドウを開く |
+| `?` | ショートカット一覧の表示 |
+| `Escape` | オーバーレイを閉じる |
 
 ### Publisher (書き出しツール)
 
@@ -116,10 +141,12 @@ cargo run -- --file /path/to/track.mp3 --out /path/to/shared/ --id dj-000 --dj-n
 
 | オプション | 必須 | デフォルト | 説明 |
 |---|---|---|---|
-| `--file` | ✓ | - | 楽曲ファイルパス (mp3, m4a) |
-| `--out` | ✓ | - | 出力先ベースディレクトリ |
+| `--file` (`-f`) | ✓ | - | 楽曲ファイルパス (mp3, m4a) |
+| `--out` (`-o`) | ✓ | - | 出力先ベースディレクトリ |
 | `--id` | - | `dj-000` | DJ ディレクトリ名 |
 | `--dj-name` | - | - | DJ 名テキスト or ロゴ画像パス |
+
+コメント情報は楽曲ファイルのタグ（ID3 Comment / M4A Comment）から自動的に抽出される。
 
 ### Watch Core (検証)
 
@@ -162,6 +189,7 @@ cargo run --example watch_local -- ../../sandbox
   "artist": "アーティスト名",
   "album": "アルバム名",
   "artwork": "artwork.png",
+  "comment": "コメント情報",
   "updated_at": "2026-06-28T15:30:00+09:00"
 }
 ```
