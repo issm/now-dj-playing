@@ -1,5 +1,6 @@
 {
     "files.associations": {
-        "*.json": "jsonc"
+        "*.json": "jsonc",
+        "*.json.example": "jsonc"
     }
 }

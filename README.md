@@ -78,7 +78,7 @@ cp src-tauri/config/development.json.example src-tauri/config/development.json
 cargo tauri dev
 ```
 
-設定ファイルは `.envrc` の `NDP_CONFIG` 環境変数で指定されたパスから読み込まれる。設定ファイルの探索順序やスキーマについては [ADR-0016](docs/adr/0016-20260704-config-file-lookup.md) を参照。
+設定ファイルは `.envrc` の `NDP_CONFIG` 環境変数で指定されたパスから読み込まれる。設定ファイルの探索順序やスキーマについては [ADR-0016](docs/adr/0016-20260704-config-file-lookup.md) を参照。形式は JSONC（`//` / `/* */` コメント、trailing comma を許容）。パーサーの詳細は [ADR-0024](docs/adr/0024-20260716-config-parser-migration.md) を参照。
 
 #### 設定ファイル (`ndp.config.json`)
 
