@@ -3,14 +3,19 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use chrono::Local;
-use clap::Parser;
+use clap::{ArgAction, Parser};
 use id3::TagLike;
 use serde::Serialize;
 
 #[derive(Parser)]
 #[command(name = "ndp-publish")]
 #[command(about = "楽曲ファイルからタグ・アートワークを抽出し、共有ディレクトリに出力する")]
+#[command(version = env!("BUILD_VERSION_FULL"), disable_version_flag = true)]
 struct Cli {
+    /// バージョン情報を表示する
+    #[arg(short = 'v', long = "version", action = ArgAction::Version)]
+    version: (),
+
     /// 楽曲ファイルのパス (mp3, m4a)
     #[arg(short, long)]
     file: PathBuf,
