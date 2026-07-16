@@ -109,7 +109,7 @@ fn lookup_config_file() -> Result<PathBuf, String> {
 fn read_config_file(path: &PathBuf) -> Result<AppConfigFile, String> {
     let content = fs::read_to_string(path)
         .map_err(|e| format!("設定ファイルの読み込みに失敗 ({}): {}", path.display(), e))?;
-    serde_jsonc::from_str::<AppConfigFile>(&content)
+    serde_json_lenient::from_str::<AppConfigFile>(&content)
         .map_err(|e| format!("設定ファイルのパースに失敗 ({}): {}", path.display(), e))
 }
 
