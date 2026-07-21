@@ -5,7 +5,37 @@ use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use tokio::sync::broadcast;
 use uuid::Uuid;
+
+/// SSE で配信するイベント
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "type")]
+pub enum SessionEvent {
+    #[serde(rename = "track_changed")]
+    TrackChanged(TrackData),
+    #[serde(rename = "publisher_joined")]
+    PublisherJoined {
+        publisher_id: String,
+        dj_name: String,
+    },
+}
+
+/// 楽曲情報
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TrackData {
+    pub publisher_id: String,
+    pub dj_name: String,
+    pub title: String,
+    pub artist: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub album: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub comment: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub artwork: Option<String>,
+    pub updated_at: String,
+}
 
 /// セッション情報
 #[derive(Debug, Clone)]
@@ -14,8 +44,9 @@ pub struct Session {
     pub code: String,
     pub event_name: Option<String>,
     pub viewer_token: String,
-    /// 参加中の publisher 一覧
     pub publishers: Vec<Publisher>,
+    /// 最新の楽曲情報（viewer 途中接続時に即送信用）
+    pub last_track: Option<TrackData>,
 }
 
 /// publisher 情報
@@ -26,16 +57,22 @@ pub struct Publisher {
     pub token: String,
 }
 
+/// セッションごとの broadcast チャネル
+struct SessionChannel {
+    tx: broadcast::Sender<SessionEvent>,
+}
+
 /// インメモリのセッションストア
-#[derive(Debug)]
 pub struct SessionStore {
     sessions: Mutex<HashMap<String, Session>>,
+    channels: Mutex<HashMap<String, SessionChannel>>,
 }
 
 impl SessionStore {
     pub fn new() -> Self {
         Self {
             sessions: Mutex::new(HashMap::new()),
+            channels: Mutex::new(HashMap::new()),
         }
     }
 
@@ -51,10 +88,17 @@ impl SessionStore {
             event_name,
             viewer_token,
             publishers: Vec::new(),
+            last_track: None,
         };
 
         let mut sessions = self.sessions.lock().unwrap();
-        sessions.insert(id, session.clone());
+        sessions.insert(id.clone(), session.clone());
+
+        // broadcast チャネルを作成（バッファ 16）
+        let (tx, _) = broadcast::channel(16);
+        let mut channels = self.channels.lock().unwrap();
+        channels.insert(id, SessionChannel { tx });
+
         session
     }
 
@@ -62,7 +106,6 @@ impl SessionStore {
     pub fn join_by_code(&self, code: &str, dj_name: &str) -> Result<(Session, Publisher), JoinError> {
         let mut sessions = self.sessions.lock().unwrap();
 
-        // コードに一致するセッションを探す
         let session = sessions
             .values_mut()
             .find(|s| s.code == code)
@@ -78,14 +121,72 @@ impl SessionStore {
         };
 
         session.publishers.push(publisher.clone());
+
+        // publisher_joined イベントを送信
+        let channels = self.channels.lock().unwrap();
+        if let Some(ch) = channels.get(&session.id) {
+            let _ = ch.tx.send(SessionEvent::PublisherJoined {
+                publisher_id: publisher.id.clone(),
+                dj_name: publisher.dj_name.clone(),
+            });
+        }
+
         Ok((session.clone(), publisher))
+    }
+
+    /// トークンから publisher とセッション ID を特定する
+    pub fn find_publisher_by_token(&self, token: &str) -> Option<(String, Publisher)> {
+        let sessions = self.sessions.lock().unwrap();
+        for session in sessions.values() {
+            if let Some(pub_info) = session.publishers.iter().find(|p| p.token == token) {
+                return Some((session.id.clone(), pub_info.clone()));
+            }
+        }
+        None
+    }
+
+    /// viewer トークンからセッション ID を特定する
+    pub fn find_session_by_viewer_token(&self, token: &str) -> Option<String> {
+        let sessions = self.sessions.lock().unwrap();
+        sessions
+            .values()
+            .find(|s| s.viewer_token == token)
+            .map(|s| s.id.clone())
+    }
+
+    /// 楽曲情報を publish し、SSE で配信する
+    pub fn publish_track(&self, session_id: &str, track: TrackData) {
+        // last_track を更新
+        {
+            let mut sessions = self.sessions.lock().unwrap();
+            if let Some(session) = sessions.get_mut(session_id) {
+                session.last_track = Some(track.clone());
+            }
+        }
+
+        // broadcast で配信
+        let channels = self.channels.lock().unwrap();
+        if let Some(ch) = channels.get(session_id) {
+            let _ = ch.tx.send(SessionEvent::TrackChanged(track));
+        }
+    }
+
+    /// SSE 用の receiver を取得する
+    pub fn subscribe(&self, session_id: &str) -> Option<broadcast::Receiver<SessionEvent>> {
+        let channels = self.channels.lock().unwrap();
+        channels.get(session_id).map(|ch| ch.tx.subscribe())
+    }
+
+    /// セッションの最新楽曲情報を取得する
+    pub fn get_last_track(&self, session_id: &str) -> Option<TrackData> {
+        let sessions = self.sessions.lock().unwrap();
+        sessions.get(session_id).and_then(|s| s.last_track.clone())
     }
 }
 
 /// join 時のエラー
 #[derive(Debug)]
 pub enum JoinError {
-    /// コードに一致するセッションが見つからない
     InvalidCode,
 }
 
