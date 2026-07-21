@@ -22,6 +22,7 @@
 
 - direnv を使用している。ターミナルでのコマンド実行時は `.envrc` の内容を考慮すること
 - Node.js のバージョン管理は nodenv を使用。`NODENV_VERSION` 環境変数で指定する
+- JSON の整形・抽出には `jq` を使用する（`python3 -m json.tool` ではなく）
 
 ## ファイル編集
 
