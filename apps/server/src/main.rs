@@ -26,6 +26,7 @@ async fn main() {
 
     let api = Router::new()
         .route("/sessions/create", post(session::create_session))
+        .route("/sessions/join", post(session::join_session))
         .with_state(store);
 
     let app = Router::new()
