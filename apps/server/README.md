@@ -17,14 +17,14 @@ now-dj-playing の中継サーバ。publisher から楽曲情報を受信し、S
 | GET | `/health` | ヘルスチェック | なし |
 | POST | `/api/sessions/create` | セッション作成 (viewer 用) | なし |
 | POST | `/api/sessions/join` | セッション参加 (publisher 用) | なし |
-| POST | `/api/publish` | 楽曲情報の送信 | Bearer トークン |
+| POST | `/api/sessions/{id}/publish` | 楽曲情報の送信 | Bearer トークン |
 | GET | `/api/sessions/{id}/stream` | SSE ストリーム (viewer 用) | Bearer トークン |
 
 ### フロー
 
 1. viewer が `POST /api/sessions/create` でセッションを作成 → 6桁コードと viewer_token を取得
 2. publisher が `POST /api/sessions/join` に6桁コードを送信 → publisher 用トークンを取得
-3. publisher が `POST /api/publish` で楽曲情報を送信 (Bearer トークン必須)
+3. publisher が `POST /api/sessions/{id}/publish` で楽曲情報を送信 (Bearer トークン必須)
 4. viewer が `GET /api/sessions/{id}/stream` で SSE 接続 → `track_changed` イベントを受信
 
 ## 開発
@@ -50,16 +50,6 @@ bash test.sh
 
 ```bash
 bash test.sh http://localhost:8081
-```
-
-### Docker (ローカルテスト用)
-
-```bash
-# ビルド
-docker build -t ndp-server .
-
-# 実行
-docker run --rm -p 8080:8080 ndp-server
 ```
 
 ## デプロイ

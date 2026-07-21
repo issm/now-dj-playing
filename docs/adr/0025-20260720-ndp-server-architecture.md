@@ -110,7 +110,7 @@ publisher がセッションに参加する。
 
 - `token`: 以降の publish リクエストで `Authorization: Bearer pt_xxxxxxxxxxxx` として使用
 
-#### POST /api/publish
+#### POST /api/sessions/{session_id}/publish
 
 publisher が楽曲情報を送信する。
 

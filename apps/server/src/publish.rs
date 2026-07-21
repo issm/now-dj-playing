@@ -1,4 +1,4 @@
-use axum::extract::State;
+use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::Json;
 use serde::Deserialize;
@@ -16,9 +16,10 @@ pub struct PublishRequest {
     pub updated_at: String,
 }
 
-/// POST /api/publish
+/// POST /api/sessions/{session_id}/publish
 pub async fn publish(
     State(store): State<Arc<SessionStore>>,
+    Path(session_id): Path<String>,
     headers: HeaderMap,
     Json(body): Json<PublishRequest>,
 ) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
@@ -33,7 +34,7 @@ pub async fn publish(
     })?;
 
     // トークンから publisher とセッションを特定
-    let (session_id, publisher) = store.find_publisher_by_token(token).ok_or_else(|| {
+    let (token_session_id, publisher) = store.find_publisher_by_token(token).ok_or_else(|| {
         (
             StatusCode::UNAUTHORIZED,
             Json(ErrorResponse {
@@ -41,6 +42,16 @@ pub async fn publish(
             }),
         )
     })?;
+
+    // パスのセッション ID とトークンのセッション ID が一致するか検証
+    if token_session_id != session_id {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(ErrorResponse {
+                error: "このセッションへのアクセス権がありません".to_string(),
+            }),
+        ));
+    }
 
     // TrackData を組み立てて publish
     let track = TrackData {

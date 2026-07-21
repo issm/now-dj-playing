@@ -29,7 +29,7 @@ async fn main() {
     let api = Router::new()
         .route("/sessions/create", post(session::create_session))
         .route("/sessions/join", post(session::join_session))
-        .route("/publish", post(publish::publish))
+        .route("/sessions/{session_id}/publish", post(publish::publish))
         .route("/sessions/{session_id}/stream", get(stream::stream))
         .with_state(store);
 

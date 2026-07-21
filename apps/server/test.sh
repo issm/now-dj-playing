@@ -77,8 +77,8 @@ assert_status "無効コード → 404" "404" "$STATUS"
 show_body "$BODY"
 
 # --- Publish ---
-echo "[5] POST /api/publish"
-STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE_URL/api/publish" \
+echo "[5] POST /api/sessions/{id}/publish"
+STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE_URL/api/sessions/$SESSION_ID/publish" \
   -H 'Content-Type: application/json' \
   -H "Authorization: Bearer $PUBLISHER_TOKEN" \
   -d '{
@@ -93,8 +93,8 @@ dim "  (No Content)"
 echo
 
 # --- Publish (認証なし) ---
-echo "[6] POST /api/publish (認証なし)"
-RESP=$(curl -s -w "\n%{http_code}" -X POST "$BASE_URL/api/publish" \
+echo "[6] POST /api/sessions/{id}/publish (認証なし)"
+RESP=$(curl -s -w "\n%{http_code}" -X POST "$BASE_URL/api/sessions/$SESSION_ID/publish" \
   -H 'Content-Type: application/json' \
   -d '{"title":"X","artist":"Y","updated_at":"2026-07-20T00:00:00+09:00"}')
 STATUS=$(echo "$RESP" | tail -1)
