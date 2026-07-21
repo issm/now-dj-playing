@@ -60,7 +60,11 @@ Lightsail が CDK (CloudFormation) の管理対象外のため、現時点では
 
 ### API 設計
 
-#### POST /sessions/create
+ベースパス: `/api/`
+
+ヘルスチェック (`GET /health`) のみベースパスの外に配置する。
+
+#### POST /api/sessions/create
 
 viewer がセッションを開始する。
 
@@ -83,7 +87,7 @@ viewer がセッションを開始する。
 - `code`: 0 埋め 6 桁。publisher が join 時に入力する認証コード
 - `viewer_token`: SSE 接続時の認証用
 
-#### POST /sessions/join
+#### POST /api/sessions/join
 
 publisher がセッションに参加する。
 
@@ -106,7 +110,7 @@ publisher がセッションに参加する。
 
 - `token`: 以降の publish リクエストで `Authorization: Bearer pt_xxxxxxxxxxxx` として使用
 
-#### POST /publish
+#### POST /api/publish
 
 publisher が楽曲情報を送信する。
 
@@ -132,7 +136,7 @@ Authorization: Bearer pt_xxxxxxxxxxxx
 
 レスポンス: 204 No Content
 
-#### GET /sessions/{session_id}/stream
+#### GET /api/sessions/{session_id}/stream
 
 viewer が SSE で楽曲更新を受信する。
 
