@@ -18,7 +18,7 @@ struct HealthResponse {
 async fn health() -> Json<HealthResponse> {
     Json(HealthResponse {
         status: "ok",
-        version: env!("CARGO_PKG_VERSION"),
+        version: env!("BUILD_VERSION_FULL"),
     })
 }
 
