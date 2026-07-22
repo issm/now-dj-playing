@@ -179,7 +179,7 @@ data: {}
 ```
 
 - インフラ管理は AWS CLI ラッパースクリプトで行う
-- デプロイはクロスコンパイル + scp + systemd
+- デプロイはクロスコンパイル (`cargo-zigbuild` + musl ターゲット) + scp + systemd
 
 ### ストレージ設計方針
 

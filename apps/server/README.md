@@ -60,12 +60,25 @@ bash test.sh http://localhost:8081
 [Caddy :443] → [ndp-server :8080 (systemd)]
 ```
 
-```bash
-# ビルド (macOS → Linux)
-cross build --release --target x86_64-unknown-linux-gnu -p ndp-server
+### ビルド (macOS → Linux x86_64)
 
-# 配置
-scp target/x86_64-unknown-linux-gnu/release/ndp-server user@server:/opt/ndp/
+`cargo-zigbuild` + musl ターゲットで静的リンクバイナリを生成する。
+
+```bash
+# 前提: brew install zig && cargo install cargo-zigbuild
+# ターゲット追加 (初回のみ)
+rustup target add x86_64-unknown-linux-musl
+
+# ビルド
+cargo zigbuild --release --target x86_64-unknown-linux-musl -p ndp-server
+```
+
+出力: `target/x86_64-unknown-linux-musl/release/ndp-server` (静的リンク, ~1.6MB)
+
+### 配置
+
+```bash
+scp target/x86_64-unknown-linux-musl/release/ndp-server user@server:/opt/ndp/
 ssh user@server "sudo systemctl restart ndp-server"
 ```
 
