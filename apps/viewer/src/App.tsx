@@ -309,8 +309,25 @@ function App() {
                 </div>
             )}
 
-            <div className="relative z-10 flex h-full w-full flex-col items-center justify-center">
-                {track ? <TrackDisplay track={track} roster={roster} eventName={showEventName ? eventName : null} showComments={showComments} showTags={showTags} /> : <WaitingScreen sessionCode={sessionCode} />}
+            <div className="relative z-10 flex h-full w-full flex-col">
+                {/* イベント名（track の有無に関わらず表示） */}
+                {showEventName && eventName && (
+                    <div className="shrink-0 pt-4 text-center">
+                        <span className="text-sm text-gray-400 md:text-base">{eventName}</span>
+                    </div>
+                )}
+
+                {/* ヘッダ: 参加中 DJ 一覧（track の有無に関わらず表示） */}
+                <DjRosterHeader
+                    roster={roster}
+                    currentDjId={track?.dirName ?? null}
+                    fallbackName={track ? track.djName ?? track.dirName : null}
+                    djLogoSrc={resolveImageSrc(track?.djLogoPath ?? null, track?.updatedAt ?? "")}
+                />
+
+                <div className={`flex min-h-0 flex-1 w-full flex-col items-center ${track ? "justify-center" : "justify-start"}`}>
+                    {track ? <TrackBody track={track} showComments={showComments} showTags={showTags} /> : <WaitingScreen sessionCode={sessionCode} />}
+                </div>
             </div>
 
             {showShortcuts && <ShortcutOverlay onClose={() => setShowShortcuts(false)} />}
@@ -376,7 +393,7 @@ function ShortcutOverlay({ onClose }: { onClose: () => void }) {
 
 function WaitingScreen({ sessionCode }: { sessionCode: string | null }) {
     return (
-        <div className="text-center">
+        <div className="pt-48 text-center">
             <h1 className="text-4xl font-bold">now-dj-playing</h1>
             <p className="mt-4 text-lg text-gray-400">
                 トラック情報を待機中...
@@ -388,57 +405,37 @@ function WaitingScreen({ sessionCode }: { sessionCode: string | null }) {
     );
 }
 
-function TrackDisplay({ track, roster, eventName, showComments, showTags }: { track: TrackPayload; roster: Map<string, string>; eventName: string | null; showComments: boolean; showTags: boolean }) {
-    const djLogoSrc = resolveImageSrc(track.djLogoPath, track.updatedAt);
+function TrackBody({ track, showComments, showTags }: { track: TrackPayload; showComments: boolean; showTags: boolean }) {
     const artworkSrc = resolveImageSrc(track.artworkPath, track.updatedAt);
-    const currentDjId = track.dirName;
 
     return (
-        <div className="flex h-full w-full flex-col">
-            {/* イベント名 */}
-            {eventName && (
-                <div className="shrink-0 pt-4 text-center">
-                    <span className="text-sm text-gray-400 md:text-base">{eventName}</span>
-                </div>
-            )}
+        <main className="flex min-h-0 h-full w-full flex-1 flex-col items-center justify-center gap-8 px-8 pb-8 md:flex-row md:gap-12">
+            {/* 左: アートワーク */}
+            <div className="flex w-full shrink-0 items-center justify-center md:h-full md:w-1/2">
+                <img
+                    src={artworkSrc ?? "/default-artwork.png"}
+                    alt="Artwork"
+                    className="w-64 max-h-full rounded-lg object-contain shadow-lg md:w-full md:max-w-[85vh]"
+                    onError={(e) => {
+                        e.currentTarget.src = "/default-artwork.png";
+                    }}
+                />
+            </div>
 
-            {/* ヘッダ: DJ 情報 */}
-            <DjRosterHeader
-                roster={roster}
-                currentDjId={currentDjId}
-                fallbackName={track.djName ?? track.dirName}
-                djLogoSrc={djLogoSrc}
-            />
-
-            {/* ボディ: アートワーク + 楽曲情報 */}
-            <main className="flex min-h-0 flex-1 flex-col items-center justify-center gap-8 px-8 pb-8 md:flex-row md:gap-12">
-                {/* 左: アートワーク */}
-                <div className="flex w-full shrink-0 items-center justify-center md:h-full md:w-1/2">
-                    <img
-                        src={artworkSrc ?? "/default-artwork.png"}
-                        alt="Artwork"
-                        className="w-64 max-h-full rounded-lg object-contain shadow-lg md:w-full md:max-w-[85vh]"
-                        onError={(e) => {
-                            e.currentTarget.src = "/default-artwork.png";
-                        }}
-                    />
-                </div>
-
-                {/* 右: 楽曲情報 */}
-                <div className="flex w-full flex-col items-center justify-center gap-4 md:h-full md:w-1/2 md:items-start">
-                    <div className="text-center md:text-left">
-                        <h2 className="text-2xl font-bold md:text-4xl">{track.title}</h2>
-                        <p className="mt-4 text-lg text-gray-300 md:text-2xl">{track.artist}</p>
-                        {track.album && (
-                            <p className="mt-4 text-base text-gray-500 md:text-lg">{track.album}</p>
-                        )}
-                    </div>
-                    {showComments && track.comment && (
-                        <CommentDisplay raw={track.comment} showTags={showTags} />
+            {/* 右: 楽曲情報 */}
+            <div className="flex w-full flex-col items-center justify-center gap-4 md:h-full md:w-1/2 md:items-start">
+                <div className="text-center md:text-left">
+                    <h2 className="text-2xl font-bold md:text-4xl">{track.title}</h2>
+                    <p className="mt-4 text-lg text-gray-300 md:text-2xl">{track.artist}</p>
+                    {track.album && (
+                        <p className="mt-4 text-base text-gray-500 md:text-lg">{track.album}</p>
                     )}
                 </div>
-            </main>
-        </div>
+                {showComments && track.comment && (
+                    <CommentDisplay raw={track.comment} showTags={showTags} />
+                )}
+            </div>
+        </main>
     );
 }
 
@@ -449,40 +446,47 @@ function DjRosterHeader({
     djLogoSrc,
 }: {
     roster: Map<string, string>;
-    currentDjId: string;
-    fallbackName: string;
+    currentDjId: string | null;
+    fallbackName: string | null;
     djLogoSrc: string | null;
 }) {
     const entries = Array.from(roster.entries());
 
     // n <= 1: 従来通りの単一表示（ハイライトなし）
+    // ロスターが空の場合も高さを確保するため、常にヘッダ自体は表示する
     if (entries.length <= 1) {
+        const displayName = entries[0]?.[1] ?? fallbackName;
+
         return (
             <header className="flex h-[100px] shrink-0 items-center justify-center gap-3 px-8">
-                {djLogoSrc ? (
-                    <img
-                        src={djLogoSrc}
-                        alt="DJ Logo"
-                        className="h-10 w-10 rounded-full object-cover md:h-12 md:w-12"
-                    />
-                ) : null}
-                <span className="text-xl font-semibold text-gray-300 md:text-3xl">
-                    {entries[0]?.[1] ?? fallbackName}
-                </span>
+                {displayName && (
+                    <>
+                        {djLogoSrc ? (
+                            <img
+                                src={djLogoSrc}
+                                alt="DJ Logo"
+                                className="h-10 w-10 rounded-full object-cover md:h-12 md:w-12"
+                            />
+                        ) : null}
+                        <span className="text-xl font-semibold text-gray-300 md:text-3xl">
+                            {displayName}
+                        </span>
+                    </>
+                )}
             </header>
         );
     }
 
     // n >= 2: 横並び表示 + 現在の DJ をハイライト
     return (
-        <header className="flex h-[100px] shrink-0 flex-wrap items-center justify-center gap-x-6 gap-y-1 px-8">
+        <header className="flex h-[100px] shrink-0 flex-wrap items-center justify-center gap-x-8 gap-y-1 px-8">
             {entries.map(([id, name]) => {
                 const isCurrent = id === currentDjId;
                 return (
                     <span
                         key={id}
-                        className={`text-lg font-semibold md:text-2xl ${isCurrent
-                            ? "border-b-4 border-emerald-400 text-white"
+                        className={`px-2 text-xl font-semibold md:text-3xl ${isCurrent
+                            ? "border-b-4 border-yellow-500 text-white"
                             : "border-b-4 border-transparent text-gray-500"
                             }`}
                     >
