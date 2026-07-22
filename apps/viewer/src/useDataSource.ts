@@ -7,6 +7,8 @@ import type { AppConfig, TrackPayload } from "./types";
 export interface DataSourceCallbacks {
   onTrack: (track: TrackPayload) => void;
   onError: (message: string) => void;
+  /** web モード: セッション作成完了時に呼ばれる */
+  onSessionCreated?: (sessionCode: string) => void;
 }
 
 /**
@@ -92,6 +94,9 @@ function startWebDataSource(
       console.log(
         `[web] セッション作成: id=${session.session_id}, code=${session.code}`,
       );
+
+      // セッションコードを通知
+      callbacksRef.current.onSessionCreated?.(session.code);
 
       // SSE 接続
       // EventSource は Authorization ヘッダを送れないため、クエリパラメータでトークンを渡す

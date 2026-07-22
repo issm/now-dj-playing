@@ -38,6 +38,8 @@ function App() {
 
     /** 設定（データソースフックに渡す） */
     const [appConfig, setAppConfig] = useState<AppConfig | null>(null);
+    /** web モードのセッションコード */
+    const [sessionCode, setSessionCode] = useState<string | null>(null);
 
     // info アラートを閉じる（スライドアップアニメーション付き）
     const dismissInfo = useCallback(() => {
@@ -226,6 +228,9 @@ function App() {
         onError: (message) => {
             setError(message);
         },
+        onSessionCreated: (code) => {
+            setSessionCode(code);
+        },
     });
 
     // モニタウィンドウの場合はコンパクト表示
@@ -280,7 +285,7 @@ function App() {
             )}
 
             <div className="relative z-10 flex h-full w-full flex-col items-center justify-center">
-                {track ? <TrackDisplay track={track} eventName={showEventName ? eventName : null} showComments={showComments} showTags={showTags} /> : <WaitingScreen />}
+                {track ? <TrackDisplay track={track} eventName={showEventName ? eventName : null} showComments={showComments} showTags={showTags} /> : <WaitingScreen sessionCode={sessionCode} />}
             </div>
 
             {showShortcuts && <ShortcutOverlay onClose={() => setShowShortcuts(false)} />}
@@ -344,11 +349,16 @@ function ShortcutOverlay({ onClose }: { onClose: () => void }) {
     );
 }
 
-function WaitingScreen() {
+function WaitingScreen({ sessionCode }: { sessionCode: string | null }) {
     return (
         <div className="text-center">
             <h1 className="text-4xl font-bold">now-dj-playing</h1>
-            <p className="mt-4 text-lg text-gray-400">トラック情報を待機中...</p>
+            <p className="mt-4 text-lg text-gray-400">
+                トラック情報を待機中...
+                {sessionCode && (
+                    <span className="ml-2 font-mono text-gray-500">({sessionCode})</span>
+                )}
+            </p>
         </div>
     );
 }
