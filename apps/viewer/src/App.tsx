@@ -6,6 +6,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import type { TrackPayload, AppConfig, BackgroundImageEntry, BackgroundImageConfig } from "./types";
 import { parseComment, type ParsedComment } from "./commentParser";
 import { useDataSource } from "./useDataSource";
+import { resolveImageSrc } from "./artwork";
 import MonitorView from "./MonitorView";
 import BackgroundPicker from "./BackgroundPicker";
 
@@ -368,13 +369,8 @@ function WaitingScreen({ sessionCode }: { sessionCode: string | null }) {
 
 function TrackDisplay({ track, eventName, showComments, showTags }: { track: TrackPayload; eventName: string | null; showComments: boolean; showTags: boolean }) {
     const djDisplay = track.djName ?? track.dirName;
-    const cacheBuster = `?t=${encodeURIComponent(track.updatedAt)}`;
-    const artworkSrc = track.artworkPath
-        ? convertFileSrc(track.artworkPath) + cacheBuster
-        : null;
-    const djLogoSrc = track.djLogoPath
-        ? convertFileSrc(track.djLogoPath) + cacheBuster
-        : null;
+    const artworkSrc = resolveImageSrc(track.artworkPath, track.updatedAt);
+    const djLogoSrc = resolveImageSrc(track.djLogoPath, track.updatedAt);
 
     return (
         <div className="flex h-full w-full flex-col">

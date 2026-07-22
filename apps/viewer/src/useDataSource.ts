@@ -115,7 +115,8 @@ function startWebDataSource(
             artist: data.artist,
             album: data.album ?? null,
             comment: data.comment ?? null,
-            artworkPath: null, // web モードではアートワークは Base64 Data URI (将来対応)
+            // ndp-server から Base64 Data URI (data:image/...) がそのまま送られてくる
+            artworkPath: data.artwork ?? null,
             updatedAt: data.updated_at,
           };
           callbacksRef.current.onTrack(track);

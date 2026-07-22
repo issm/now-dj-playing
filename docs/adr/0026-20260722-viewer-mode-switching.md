@@ -92,10 +92,18 @@ useDataSource(appConfig, {
 
 Tauri の WebView から `http://localhost:8080` への `fetch` / `EventSource` は別オリジンとして扱われるため、ndp-server 側で CORS を許可する必要がある（ADR-0025 参照）。
 
+### アートワークの表示方式
+
+`TrackPayload.artworkPath` / `djLogoPath` は local モードではローカルファイルパス、web モードでは ndp-server から受け取る Base64 Data URI (`data:image/...`) のいずれかが入る。`apps/viewer/src/artwork.ts` の `resolveImageSrc()` で両者を判別する:
+
+- `data:` から始まる場合 → そのまま `<img src>` に使う（Data URI はコンテンツが変わればデータ自体が変わるため、キャッシュバスターは不要）
+- それ以外 → ローカルファイルパスとして `convertFileSrc()` で変換し、`updatedAt` によるキャッシュバスターを付与する
+
+`useDataSource.ts` の web モード側では、ndp-server から受け取った `TrackData.artwork` をそのまま `TrackPayload.artworkPath` に格納する（DJ ロゴは ndp-server の TrackData に対応するフィールドがないため未対応）。
+
 ### 未対応・将来対応
 
-- **アートワーク**: web モードでは現時点で非対応（`artworkPath: null` を返し「NO ARTWORK」表示になる）。将来的に ndp-server の `TrackData.artwork` (Base64 Data URI) を受け取り `<img src>` に直接埋め込む対応を行う
-- **DJ ロゴ**: 同様に web モードでは非対応
+- **DJ ロゴ**: ndp-server の `TrackData` に DJ ロゴ用フィールドがないため、web モードでは非対応
 - **背景画像**: web モードでもローカルファイルシステムの背景画像設定は有効（Tauri アプリとして動作するため `convertFileSrc` が使える）。iPad Safari 上の Web viewer（別 issue）では利用不可
 
 ## 影響
@@ -105,3 +113,4 @@ Tauri の WebView から `http://localhost:8080` への `fetch` / `EventSource` 
 - フロントエンドに `useDataSource` フックを追加、`App.tsx` のデータ取得ロジックを移行
 - ndp-server 側に CORS ミドルウェアとクエリパラメータ認証を追加（ADR-0025 に記載）
 - web モード時の待機画面にセッションコードを表示するようになった
+- web モードでアートワーク表示に対応（Base64 Data URI）
