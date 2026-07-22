@@ -80,11 +80,13 @@ viewer がセッションを開始する。
 {
   "session_id": "550e8400-e29b-41d4-a716-446655440000",
   "code": "037482",
+  "event_name": "DJ Night 2026-07-20",
   "viewer_token": "vt_xxxxxxxxxxxx"
 }
 ```
 
 - `code`: 0 埋め 6 桁。publisher が join 時に入力する認証コード
+- `event_name`: リクエストで指定した場合のみ含まれる (nullable)
 - `viewer_token`: SSE 接続時の認証用
 
 #### POST /api/sessions/join

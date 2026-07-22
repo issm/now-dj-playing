@@ -208,6 +208,7 @@ pub struct CreateSessionRequest {
 pub struct CreateSessionResponse {
     pub session_id: String,
     pub code: String,
+    pub event_name: Option<String>,
     pub viewer_token: String,
 }
 
@@ -221,6 +222,7 @@ pub async fn create_session(
     let response = CreateSessionResponse {
         session_id: session.id,
         code: session.code,
+        event_name: session.event_name,
         viewer_token: session.viewer_token,
     };
 
