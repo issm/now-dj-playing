@@ -1,8 +1,9 @@
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::IntoResponse;
 use axum::Json;
+use serde::Deserialize;
 use std::convert::Infallible;
 use std::sync::Arc;
 use tokio_stream::wrappers::BroadcastStream;
@@ -10,21 +11,34 @@ use tokio_stream::StreamExt;
 
 use crate::session::{ErrorResponse, SessionEvent, SessionStore};
 
+/// SSE ストリームのクエリパラメータ
+#[derive(Debug, Deserialize)]
+pub struct StreamQuery {
+    /// トークン（EventSource は Authorization ヘッダを送れないため、クエリパラメータでも受け付ける）
+    pub token: Option<String>,
+}
+
 /// GET /api/sessions/{session_id}/stream
 pub async fn stream(
     State(store): State<Arc<SessionStore>>,
     Path(session_id): Path<String>,
+    Query(query): Query<StreamQuery>,
     headers: HeaderMap,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
-    // Authorization ヘッダからトークンを取得
-    let token = extract_bearer_token(&headers).ok_or_else(|| {
-        (
-            StatusCode::UNAUTHORIZED,
-            Json(ErrorResponse {
-                error: "Authorization ヘッダが必要です".to_string(),
-            }),
-        )
-    })?;
+    // トークン取得: クエリパラメータ優先、なければ Authorization ヘッダ
+    let token = query
+        .token
+        .as_deref()
+        .or_else(|| extract_bearer_token(&headers))
+        .ok_or_else(|| {
+            (
+                StatusCode::UNAUTHORIZED,
+                Json(ErrorResponse {
+                    error: "トークンが必要です（クエリパラメータ token または Authorization ヘッダ）"
+                        .to_string(),
+                }),
+            )
+        })?;
 
     // viewer トークンの検証
     let valid_session_id = store.find_session_by_viewer_token(token).ok_or_else(|| {
