@@ -5,6 +5,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import type { TrackPayload, AppConfig, BackgroundImageEntry, BackgroundImageConfig } from "./types";
 import { parseComment, type ParsedComment } from "./commentParser";
+import { useDataSource } from "./useDataSource";
 import MonitorView from "./MonitorView";
 import BackgroundPicker from "./BackgroundPicker";
 
@@ -34,6 +35,9 @@ function App() {
 
     const windowLabel = getCurrentWebviewWindow().label;
     const isMonitor = windowLabel === "monitor";
+
+    /** 設定（データソースフックに渡す） */
+    const [appConfig, setAppConfig] = useState<AppConfig | null>(null);
 
     // info アラートを閉じる（スライドアップアニメーション付き）
     const dismissInfo = useCallback(() => {
@@ -190,7 +194,7 @@ function App() {
             };
         }
 
-        // メインウィンドウ: バックエンドから設定を取得し、watcher を開始
+        // メインウィンドウ: バックエンドから設定を取得
         let cancelled = false;
 
         (async () => {
@@ -200,9 +204,7 @@ function App() {
                 if (cancelled) return;
 
                 applyConfig(config);
-
-                // watcher を開始
-                await invoke("start_watch");
+                setAppConfig(config);
             } catch (err) {
                 if (!cancelled) {
                     setError(String(err));
@@ -210,26 +212,21 @@ function App() {
             }
         })();
 
-        const unlistenTrack = listen<TrackPayload>("track-changed", (event) => {
-            setTrack(event.payload);
-            setError(null);
-            // モニタウィンドウに転送（存在しなくてもエラーにはならない）
-            emitTo("monitor", "monitor-track", event.payload);
-        });
-
-        const unlistenError = listen<{ dirName: string; message: string }>(
-            "watch-error",
-            (event) => {
-                setError(`${event.payload.dirName}: ${event.payload.message}`);
-            },
-        );
-
         return () => {
             cancelled = true;
-            unlistenTrack.then((fn) => fn());
-            unlistenError.then((fn) => fn());
         };
     }, [isMonitor]);
+
+    // データソースフック（config が取得されたら開始）
+    useDataSource(isMonitor ? null : appConfig, {
+        onTrack: (track) => {
+            setTrack(track);
+            setError(null);
+        },
+        onError: (message) => {
+            setError(message);
+        },
+    });
 
     // モニタウィンドウの場合はコンパクト表示
     if (isMonitor) {
