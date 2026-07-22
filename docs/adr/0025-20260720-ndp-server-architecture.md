@@ -142,8 +142,12 @@ Authorization: Bearer pt_xxxxxxxxxxxx
 
 viewer が SSE で楽曲更新を受信する。
 
-ヘッダ:
+認証（いずれかの方式）:
 ```
+# クエリパラメータ（EventSource API 用）
+GET /api/sessions/{session_id}/stream?token=vt_xxxxxxxxxxxx
+
+# Authorization ヘッダ
 Authorization: Bearer vt_xxxxxxxxxxxx
 ```
 
