@@ -33,10 +33,28 @@ export interface BackgroundImageEntry {
   absolutePath: string;
 }
 
-/** Rust 側から返されるアプリ設定 */
-export interface AppConfig {
+/** データソースモード */
+export type Mode = "local" | "web";
+
+/** local モード固有の設定 */
+export interface LocalConfig {
   watchDir: string;
   djId: string;
+}
+
+/** web モード固有の設定 */
+export interface WebConfig {
+  serverUrl: string;
+}
+
+/** Rust 側から返されるアプリ設定 */
+export interface AppConfig {
+  /** データソースモード */
+  mode: Mode;
+  /** local モード固有の設定 */
+  local: LocalConfig;
+  /** web モード固有の設定 */
+  web: WebConfig;
   enableComments: boolean;
   showTags: boolean;
   /** イベント名（省略時は null） */
