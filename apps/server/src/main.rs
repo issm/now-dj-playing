@@ -6,6 +6,7 @@ use axum::{routing::get, routing::post, Json, Router};
 use serde::Serialize;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use tower_http::cors::{Any, CorsLayer};
 
 use session::SessionStore;
 
@@ -26,6 +27,12 @@ async fn health() -> Json<HealthResponse> {
 async fn main() {
     let store = Arc::new(SessionStore::new());
 
+    // CORS: 開発時は全オリジン許可。本番では Caddy が前段にいるため影響なし
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods(Any)
+        .allow_headers(Any);
+
     let api = Router::new()
         .route("/sessions/create", post(session::create_session))
         .route("/sessions/join", post(session::join_session))
@@ -35,7 +42,8 @@ async fn main() {
 
     let app = Router::new()
         .route("/health", get(health))
-        .nest("/api", api);
+        .nest("/api", api)
+        .layer(cors);
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 8080));
     eprintln!("ndp-server listening on {}", addr);

@@ -184,6 +184,10 @@ data: {}
   Caddy (:443, auto TLS) → ndp-server (:8080)
 ```
 
+### CORS
+
+開発時は全オリジン許可 (`Access-Control-Allow-Origin: *`)。本番では Caddy が前段にいるため同一オリジンとなり CORS の影響はない。
+
 - インフラ管理は AWS CLI ラッパースクリプトで行う
 - デプロイはクロスコンパイル (`cargo-zigbuild` + musl ターゲット) + scp + systemd
 
