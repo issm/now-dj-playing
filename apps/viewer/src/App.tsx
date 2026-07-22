@@ -41,6 +41,8 @@ function App() {
     const [appConfig, setAppConfig] = useState<AppConfig | null>(null);
     /** web モードのセッションコード */
     const [sessionCode, setSessionCode] = useState<string | null>(null);
+    /** 参加中 DJ 一覧（id → 表示名） */
+    const [roster, setRoster] = useState<Map<string, string>>(new Map());
 
     // info アラートを閉じる（スライドアップアニメーション付き）
     const dismissInfo = useCallback(() => {
@@ -97,6 +99,7 @@ function App() {
         setInfoDismissing(false);
         setSessionCode(null);
         setTrack(null);
+        setRoster(new Map());
         try {
             const config = await invoke<AppConfig>("reload_config");
             applyConfig(config);
@@ -228,12 +231,30 @@ function App() {
         onTrack: (track) => {
             setTrack(track);
             setError(null);
+            // track_changed の DJ を参加中一覧に追加/更新する
+            // （local モードではこれだけで n=1 の一覧になる）
+            const djId = track.dirName;
+            const djDisplayName = track.djName ?? track.dirName;
+            setRoster((prev) => {
+                if (prev.get(djId) === djDisplayName) return prev;
+                const next = new Map(prev);
+                next.set(djId, djDisplayName);
+                return next;
+            });
         },
         onError: (message) => {
             setError(message);
         },
         onSessionCreated: (code) => {
             setSessionCode(code);
+        },
+        onDjJoined: (dj) => {
+            setRoster((prev) => {
+                if (prev.get(dj.id) === dj.djName) return prev;
+                const next = new Map(prev);
+                next.set(dj.id, dj.djName);
+                return next;
+            });
         },
     });
 
@@ -289,7 +310,7 @@ function App() {
             )}
 
             <div className="relative z-10 flex h-full w-full flex-col items-center justify-center">
-                {track ? <TrackDisplay track={track} eventName={showEventName ? eventName : null} showComments={showComments} showTags={showTags} /> : <WaitingScreen sessionCode={sessionCode} />}
+                {track ? <TrackDisplay track={track} roster={roster} eventName={showEventName ? eventName : null} showComments={showComments} showTags={showTags} /> : <WaitingScreen sessionCode={sessionCode} />}
             </div>
 
             {showShortcuts && <ShortcutOverlay onClose={() => setShowShortcuts(false)} />}
@@ -367,10 +388,10 @@ function WaitingScreen({ sessionCode }: { sessionCode: string | null }) {
     );
 }
 
-function TrackDisplay({ track, eventName, showComments, showTags }: { track: TrackPayload; eventName: string | null; showComments: boolean; showTags: boolean }) {
-    const djDisplay = track.djName ?? track.dirName;
-    const artworkSrc = resolveImageSrc(track.artworkPath, track.updatedAt);
+function TrackDisplay({ track, roster, eventName, showComments, showTags }: { track: TrackPayload; roster: Map<string, string>; eventName: string | null; showComments: boolean; showTags: boolean }) {
     const djLogoSrc = resolveImageSrc(track.djLogoPath, track.updatedAt);
+    const artworkSrc = resolveImageSrc(track.artworkPath, track.updatedAt);
+    const currentDjId = track.dirName;
 
     return (
         <div className="flex h-full w-full flex-col">
@@ -382,18 +403,12 @@ function TrackDisplay({ track, eventName, showComments, showTags }: { track: Tra
             )}
 
             {/* ヘッダ: DJ 情報 */}
-            <header className="flex h-[100px] shrink-0 items-center justify-center gap-3 px-8">
-                {djLogoSrc ? (
-                    <img
-                        src={djLogoSrc}
-                        alt="DJ Logo"
-                        className="h-10 w-10 rounded-full object-cover md:h-12 md:w-12"
-                    />
-                ) : null}
-                <span className="text-xl font-semibold text-gray-300 md:text-3xl">
-                    {djDisplay}
-                </span>
-            </header>
+            <DjRosterHeader
+                roster={roster}
+                currentDjId={currentDjId}
+                fallbackName={track.djName ?? track.dirName}
+                djLogoSrc={djLogoSrc}
+            />
 
             {/* ボディ: アートワーク + 楽曲情報 */}
             <main className="flex min-h-0 flex-1 flex-col items-center justify-center gap-8 px-8 pb-8 md:flex-row md:gap-12">
@@ -424,6 +439,58 @@ function TrackDisplay({ track, eventName, showComments, showTags }: { track: Tra
                 </div>
             </main>
         </div>
+    );
+}
+
+function DjRosterHeader({
+    roster,
+    currentDjId,
+    fallbackName,
+    djLogoSrc,
+}: {
+    roster: Map<string, string>;
+    currentDjId: string;
+    fallbackName: string;
+    djLogoSrc: string | null;
+}) {
+    const entries = Array.from(roster.entries());
+
+    // n <= 1: 従来通りの単一表示（ハイライトなし）
+    if (entries.length <= 1) {
+        return (
+            <header className="flex h-[100px] shrink-0 items-center justify-center gap-3 px-8">
+                {djLogoSrc ? (
+                    <img
+                        src={djLogoSrc}
+                        alt="DJ Logo"
+                        className="h-10 w-10 rounded-full object-cover md:h-12 md:w-12"
+                    />
+                ) : null}
+                <span className="text-xl font-semibold text-gray-300 md:text-3xl">
+                    {entries[0]?.[1] ?? fallbackName}
+                </span>
+            </header>
+        );
+    }
+
+    // n >= 2: 横並び表示 + 現在の DJ をハイライト
+    return (
+        <header className="flex h-[100px] shrink-0 flex-wrap items-center justify-center gap-x-6 gap-y-1 px-8">
+            {entries.map(([id, name]) => {
+                const isCurrent = id === currentDjId;
+                return (
+                    <span
+                        key={id}
+                        className={`text-lg font-semibold md:text-2xl ${isCurrent
+                            ? "border-b-4 border-emerald-400 text-white"
+                            : "border-b-4 border-transparent text-gray-500"
+                            }`}
+                    >
+                        {name}
+                    </span>
+                );
+            })}
+        </header>
     );
 }
 

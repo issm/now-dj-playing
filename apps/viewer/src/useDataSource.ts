@@ -3,12 +3,20 @@ import { listen, emitTo } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import type { AppConfig, TrackPayload } from "./types";
 
+/** 参加中 DJ の情報 */
+export interface DjJoined {
+  id: string;
+  djName: string;
+}
+
 /** データソースのコールバック */
 export interface DataSourceCallbacks {
   onTrack: (track: TrackPayload) => void;
   onError: (message: string) => void;
   /** web モード: セッション作成完了時に呼ばれる */
   onSessionCreated?: (sessionCode: string) => void;
+  /** web モード: publisher が join したときに呼ばれる */
+  onDjJoined?: (dj: DjJoined) => void;
 }
 
 /**
@@ -133,6 +141,10 @@ function startWebDataSource(
           console.log(
             `[web] publisher 参加: ${data.dj_name} (${data.publisher_id})`,
           );
+          callbacksRef.current.onDjJoined?.({
+            id: data.publisher_id,
+            djName: data.dj_name,
+          });
         } catch {
           // 無視
         }
