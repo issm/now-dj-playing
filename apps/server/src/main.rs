@@ -7,6 +7,8 @@ use serde::Serialize;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
+use tower_http::trace::TraceLayer;
+use tracing_subscriber::EnvFilter;
 
 use session::SessionStore;
 
@@ -25,6 +27,14 @@ async fn health() -> Json<HealthResponse> {
 
 #[tokio::main]
 async fn main() {
+    // tracing の初期化（RUST_LOG 環境変数で制御可能、デフォルト info + tower_http は debug）
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| EnvFilter::new("info,tower_http=debug")),
+        )
+        .init();
+
     let store = Arc::new(SessionStore::new());
 
     // CORS: 開発時は全オリジン許可。本番では Caddy が前段にいるため影響なし
@@ -43,10 +53,11 @@ async fn main() {
     let app = Router::new()
         .route("/health", get(health))
         .nest("/api", api)
-        .layer(cors);
+        .layer(cors)
+        .layer(TraceLayer::new_for_http());
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 8080));
-    eprintln!("ndp-server listening on {}", addr);
+    tracing::info!("ndp-server listening on {}", addr);
 
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();
