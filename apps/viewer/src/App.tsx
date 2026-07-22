@@ -87,16 +87,19 @@ function App() {
         }
     };
 
-    // 設定を再読み込みして watcher を起動する
+    // 設定を再読み込みしてデータソースを再起動する
+    // データソースの起動自体は useDataSource が appConfig の変更を検知して行う
     const handleReloadConfig = async () => {
         setReloading(true);
         setError(null);
         setInfoMessage(null);
         setInfoDismissing(false);
+        setSessionCode(null);
+        setTrack(null);
         try {
             const config = await invoke<AppConfig>("reload_config");
             applyConfig(config);
-            await invoke("start_watch");
+            setAppConfig(config);
         } catch (err) {
             setError(String(err));
         } finally {
