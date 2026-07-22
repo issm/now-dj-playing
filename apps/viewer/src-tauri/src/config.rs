@@ -67,10 +67,6 @@ pub struct AppConfigFile {
     pub local: Option<LocalConfigFile>,
     /// web モード固有の設定
     pub web: Option<WebConfigFile>,
-    /// 後方互換: トップレベルの watch_dir（local セクションがない場合のフォールバック）
-    pub watch_dir: Option<String>,
-    /// 後方互換: トップレベルの dj_id（local セクションがない場合のフォールバック）
-    pub dj_id: Option<String>,
     pub enable_comments: Option<bool>,
     pub show_tags: Option<bool>,
     pub event_name: Option<String>,
@@ -168,13 +164,12 @@ fn merge_config(file: AppConfigFile, config_path: &PathBuf) -> AppConfig {
 
     let mode = file.mode.unwrap_or(Mode::Local);
 
-    // local 設定の解決（local セクション優先、トップレベルをフォールバック）
+    // local 設定の解決
     let local_config = {
         let watch_dir_raw = file
             .local
             .as_ref()
             .and_then(|l| l.watch_dir.clone())
-            .or(file.watch_dir)
             .unwrap_or_else(|| {
                 let home = dirs_home().unwrap_or_else(|| "/tmp".into());
                 home.join("ndp").display().to_string()
@@ -185,7 +180,6 @@ fn merge_config(file: AppConfigFile, config_path: &PathBuf) -> AppConfig {
             .local
             .as_ref()
             .and_then(|l| l.dj_id.clone())
-            .or(file.dj_id)
             .unwrap_or_else(|| "dj-000".to_string());
 
         LocalConfig { watch_dir, dj_id }
