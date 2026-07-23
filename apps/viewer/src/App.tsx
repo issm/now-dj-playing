@@ -5,6 +5,8 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import type { TrackPayload, AppConfig, BackgroundImageEntry, BackgroundImageConfig } from "./types";
 import { parseComment, type ParsedComment } from "./commentParser";
+import { useDataSource } from "./useDataSource";
+import { resolveImageSrc } from "./artwork";
 import MonitorView from "./MonitorView";
 import BackgroundPicker from "./BackgroundPicker";
 
@@ -34,6 +36,13 @@ function App() {
 
     const windowLabel = getCurrentWebviewWindow().label;
     const isMonitor = windowLabel === "monitor";
+
+    /** 設定（データソースフックに渡す） */
+    const [appConfig, setAppConfig] = useState<AppConfig | null>(null);
+    /** web モードのセッションコード */
+    const [sessionCode, setSessionCode] = useState<string | null>(null);
+    /** 参加中 DJ 一覧（id → 表示名） */
+    const [roster, setRoster] = useState<Map<string, string>>(new Map());
 
     // info アラートを閉じる（スライドアップアニメーション付き）
     const dismissInfo = useCallback(() => {
@@ -81,16 +90,20 @@ function App() {
         }
     };
 
-    // 設定を再読み込みして watcher を起動する
+    // 設定を再読み込みしてデータソースを再起動する
+    // データソースの起動自体は useDataSource が appConfig の変更を検知して行う
     const handleReloadConfig = async () => {
         setReloading(true);
         setError(null);
         setInfoMessage(null);
         setInfoDismissing(false);
+        setSessionCode(null);
+        setTrack(null);
+        setRoster(new Map());
         try {
             const config = await invoke<AppConfig>("reload_config");
             applyConfig(config);
-            await invoke("start_watch");
+            setAppConfig(config);
         } catch (err) {
             setError(String(err));
         } finally {
@@ -190,7 +203,7 @@ function App() {
             };
         }
 
-        // メインウィンドウ: バックエンドから設定を取得し、watcher を開始
+        // メインウィンドウ: バックエンドから設定を取得
         let cancelled = false;
 
         (async () => {
@@ -200,9 +213,7 @@ function App() {
                 if (cancelled) return;
 
                 applyConfig(config);
-
-                // watcher を開始
-                await invoke("start_watch");
+                setAppConfig(config);
             } catch (err) {
                 if (!cancelled) {
                     setError(String(err));
@@ -210,26 +221,42 @@ function App() {
             }
         })();
 
-        const unlistenTrack = listen<TrackPayload>("track-changed", (event) => {
-            setTrack(event.payload);
-            setError(null);
-            // モニタウィンドウに転送（存在しなくてもエラーにはならない）
-            emitTo("monitor", "monitor-track", event.payload);
-        });
-
-        const unlistenError = listen<{ dirName: string; message: string }>(
-            "watch-error",
-            (event) => {
-                setError(`${event.payload.dirName}: ${event.payload.message}`);
-            },
-        );
-
         return () => {
             cancelled = true;
-            unlistenTrack.then((fn) => fn());
-            unlistenError.then((fn) => fn());
         };
     }, [isMonitor]);
+
+    // データソースフック（config が取得されたら開始）
+    useDataSource(isMonitor ? null : appConfig, {
+        onTrack: (track) => {
+            setTrack(track);
+            setError(null);
+            // track_changed の DJ を参加中一覧に追加/更新する
+            // （local モードではこれだけで n=1 の一覧になる）
+            const djId = track.dirName;
+            const djDisplayName = track.djName ?? track.dirName;
+            setRoster((prev) => {
+                if (prev.get(djId) === djDisplayName) return prev;
+                const next = new Map(prev);
+                next.set(djId, djDisplayName);
+                return next;
+            });
+        },
+        onError: (message) => {
+            setError(message);
+        },
+        onSessionCreated: (code) => {
+            setSessionCode(code);
+        },
+        onDjJoined: (dj) => {
+            setRoster((prev) => {
+                if (prev.get(dj.id) === dj.djName) return prev;
+                const next = new Map(prev);
+                next.set(dj.id, dj.djName);
+                return next;
+            });
+        },
+    });
 
     // モニタウィンドウの場合はコンパクト表示
     if (isMonitor) {
@@ -282,8 +309,25 @@ function App() {
                 </div>
             )}
 
-            <div className="relative z-10 flex h-full w-full flex-col items-center justify-center">
-                {track ? <TrackDisplay track={track} eventName={showEventName ? eventName : null} showComments={showComments} showTags={showTags} /> : <WaitingScreen />}
+            <div className="relative z-10 flex h-full w-full flex-col">
+                {/* イベント名（track の有無に関わらず表示） */}
+                {showEventName && eventName && (
+                    <div className="shrink-0 pt-4 text-center">
+                        <span className="text-sm text-gray-400 md:text-base">{eventName}</span>
+                    </div>
+                )}
+
+                {/* ヘッダ: 参加中 DJ 一覧（track の有無に関わらず表示） */}
+                <DjRosterHeader
+                    roster={roster}
+                    currentDjId={track?.dirName ?? null}
+                    fallbackName={track ? track.djName ?? track.dirName : null}
+                    djLogoSrc={resolveImageSrc(track?.djLogoPath ?? null, track?.updatedAt ?? "")}
+                />
+
+                <div className={`flex min-h-0 flex-1 w-full flex-col items-center ${track ? "justify-center" : "justify-start"}`}>
+                    {track ? <TrackBody track={track} showComments={showComments} showTags={showTags} /> : <WaitingScreen sessionCode={sessionCode} />}
+                </div>
             </div>
 
             {showShortcuts && <ShortcutOverlay onClose={() => setShowShortcuts(false)} />}
@@ -347,77 +391,110 @@ function ShortcutOverlay({ onClose }: { onClose: () => void }) {
     );
 }
 
-function WaitingScreen() {
+function WaitingScreen({ sessionCode }: { sessionCode: string | null }) {
     return (
-        <div className="text-center">
+        <div className="pt-48 text-center">
             <h1 className="text-4xl font-bold">now-dj-playing</h1>
-            <p className="mt-4 text-lg text-gray-400">トラック情報を待機中...</p>
+            <p className="mt-4 text-lg text-gray-400">
+                トラック情報を待機中...
+                {sessionCode && (
+                    <span className="ml-2 font-mono text-gray-500">({sessionCode})</span>
+                )}
+            </p>
         </div>
     );
 }
 
-function TrackDisplay({ track, eventName, showComments, showTags }: { track: TrackPayload; eventName: string | null; showComments: boolean; showTags: boolean }) {
-    const djDisplay = track.djName ?? track.dirName;
-    const cacheBuster = `?t=${encodeURIComponent(track.updatedAt)}`;
-    const artworkSrc = track.artworkPath
-        ? convertFileSrc(track.artworkPath) + cacheBuster
-        : null;
-    const djLogoSrc = track.djLogoPath
-        ? convertFileSrc(track.djLogoPath) + cacheBuster
-        : null;
+function TrackBody({ track, showComments, showTags }: { track: TrackPayload; showComments: boolean; showTags: boolean }) {
+    const artworkSrc = resolveImageSrc(track.artworkPath, track.updatedAt);
 
     return (
-        <div className="flex h-full w-full flex-col">
-            {/* イベント名 */}
-            {eventName && (
-                <div className="shrink-0 pt-4 text-center">
-                    <span className="text-sm text-gray-400 md:text-base">{eventName}</span>
-                </div>
-            )}
+        <main className="flex min-h-0 h-full w-full flex-1 flex-col items-center justify-center gap-8 px-8 pb-8 md:flex-row md:gap-12">
+            {/* 左: アートワーク */}
+            <div className="flex w-full shrink-0 items-center justify-center md:h-full md:w-1/2">
+                <img
+                    src={artworkSrc ?? "/default-artwork.png"}
+                    alt="Artwork"
+                    className="w-64 max-h-full rounded-lg object-contain shadow-lg md:w-full md:max-w-[85vh]"
+                    onError={(e) => {
+                        e.currentTarget.src = "/default-artwork.png";
+                    }}
+                />
+            </div>
 
-            {/* ヘッダ: DJ 情報 */}
-            <header className="flex h-[100px] shrink-0 items-center justify-center gap-3 px-8">
-                {djLogoSrc ? (
-                    <img
-                        src={djLogoSrc}
-                        alt="DJ Logo"
-                        className="h-10 w-10 rounded-full object-cover md:h-12 md:w-12"
-                    />
-                ) : null}
-                <span className="text-xl font-semibold text-gray-300 md:text-3xl">
-                    {djDisplay}
-                </span>
-            </header>
-
-            {/* ボディ: アートワーク + 楽曲情報 */}
-            <main className="flex min-h-0 flex-1 flex-col items-center justify-center gap-8 px-8 pb-8 md:flex-row md:gap-12">
-                {/* 左: アートワーク */}
-                <div className="flex w-full shrink-0 items-center justify-center md:h-full md:w-1/2">
-                    <img
-                        src={artworkSrc ?? "/default-artwork.png"}
-                        alt="Artwork"
-                        className="w-64 max-h-full rounded-lg object-contain shadow-lg md:w-full md:max-w-[85vh]"
-                        onError={(e) => {
-                            e.currentTarget.src = "/default-artwork.png";
-                        }}
-                    />
-                </div>
-
-                {/* 右: 楽曲情報 */}
-                <div className="flex w-full flex-col items-center justify-center gap-4 md:h-full md:w-1/2 md:items-start">
-                    <div className="text-center md:text-left">
-                        <h2 className="text-2xl font-bold md:text-4xl">{track.title}</h2>
-                        <p className="mt-4 text-lg text-gray-300 md:text-2xl">{track.artist}</p>
-                        {track.album && (
-                            <p className="mt-4 text-base text-gray-500 md:text-lg">{track.album}</p>
-                        )}
-                    </div>
-                    {showComments && track.comment && (
-                        <CommentDisplay raw={track.comment} showTags={showTags} />
+            {/* 右: 楽曲情報 */}
+            <div className="flex w-full flex-col items-center justify-center gap-4 md:h-full md:w-1/2 md:items-start">
+                <div className="text-center md:text-left">
+                    <h2 className="text-2xl font-bold md:text-4xl">{track.title}</h2>
+                    <p className="mt-4 text-lg text-gray-300 md:text-2xl">{track.artist}</p>
+                    {track.album && (
+                        <p className="mt-4 text-base text-gray-500 md:text-lg">{track.album}</p>
                     )}
                 </div>
-            </main>
-        </div>
+                {showComments && track.comment && (
+                    <CommentDisplay raw={track.comment} showTags={showTags} />
+                )}
+            </div>
+        </main>
+    );
+}
+
+function DjRosterHeader({
+    roster,
+    currentDjId,
+    fallbackName,
+    djLogoSrc,
+}: {
+    roster: Map<string, string>;
+    currentDjId: string | null;
+    fallbackName: string | null;
+    djLogoSrc: string | null;
+}) {
+    const entries = Array.from(roster.entries());
+
+    // n <= 1: 従来通りの単一表示（ハイライトなし）
+    // ロスターが空の場合も高さを確保するため、常にヘッダ自体は表示する
+    if (entries.length <= 1) {
+        const displayName = entries[0]?.[1] ?? fallbackName;
+
+        return (
+            <header className="flex h-[100px] shrink-0 items-center justify-center gap-3 px-8">
+                {displayName && (
+                    <>
+                        {djLogoSrc ? (
+                            <img
+                                src={djLogoSrc}
+                                alt="DJ Logo"
+                                className="h-10 w-10 rounded-full object-cover md:h-12 md:w-12"
+                            />
+                        ) : null}
+                        <span className="text-xl font-semibold text-gray-300 md:text-3xl">
+                            {displayName}
+                        </span>
+                    </>
+                )}
+            </header>
+        );
+    }
+
+    // n >= 2: 横並び表示 + 現在の DJ をハイライト
+    return (
+        <header className="flex h-[100px] shrink-0 flex-wrap items-center justify-center gap-x-8 gap-y-1 px-8">
+            {entries.map(([id, name]) => {
+                const isCurrent = id === currentDjId;
+                return (
+                    <span
+                        key={id}
+                        className={`px-2 text-xl font-semibold md:text-3xl ${isCurrent
+                            ? "border-b-4 border-yellow-500 text-white"
+                            : "border-b-4 border-transparent text-gray-500"
+                            }`}
+                    >
+                        {name}
+                    </span>
+                );
+            })}
+        </header>
     );
 }
 

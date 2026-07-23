@@ -1,8 +1,16 @@
 {
-  // 監視対象ディレクトリ（~ はホームディレクトリに展開される）
-  "watch_dir": "/tmp/ndp",
-  "dj_id": "dj-000",
+  // "local" | "web"
+  "mode": "local",
+  "local": {
+    // 監視対象ディレクトリ（~ はホームディレクトリに展開される）
+    "watch_dir": "/tmp/ndp",
+    "dj_id": "dj-000"
+  },
+  "web": {
+    "server_url": "http://localhost:8080"
+  },
   "event_name": "Club Night vol.3",
+  "show_event_name": true,
   "enable_comments": false,
   "show_tags": true,
   // 背景画像設定

@@ -175,8 +175,8 @@ fn list_background_images() -> Result<Vec<BackgroundImageEntry>, String> {
 #[tauri::command]
 fn start_watch(app: AppHandle) -> Result<String, String> {
     let config = get_or_init_config()?;
-    let base_dir = &config.watch_dir;
-    let dj_id = &config.dj_id;
+    let base_dir = &config.local.watch_dir;
+    let dj_id = &config.local.dj_id;
 
     let path = PathBuf::from(base_dir);
 
