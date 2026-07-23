@@ -64,12 +64,25 @@ impl AppConfig {
         self.file.web.as_ref().and_then(|w| w.endpoint_url.clone())
     }
 
-    /// トークンファイルのパスを返す（設定ファイルの隣に .ndp-session.json）
-    pub fn session_token_path(&self) -> Option<PathBuf> {
+    /// セッションファイルのパスを返す (ndp-publish.session.json)
+    ///
+    /// 配置先ルックアップ:
+    /// 1. 環境変数 NDP_PUBLISH_SESSION_DIR
+    /// 2. 設定ファイルと同じディレクトリ
+    pub fn session_file_path(&self) -> Option<PathBuf> {
+        // 環境変数による指定
+        if let Ok(session_dir) = std::env::var("NDP_PUBLISH_SESSION_DIR") {
+            let dir = PathBuf::from(session_dir);
+            if dir.is_dir() {
+                return Some(dir.join("ndp-publish.session.json"));
+            }
+        }
+
+        // 設定ファイルの隣
         self.config_path
             .as_ref()
             .and_then(|p| p.parent())
-            .map(|dir| dir.join(".ndp-session.json"))
+            .map(|dir| dir.join("ndp-publish.session.json"))
     }
 }
 
@@ -95,8 +108,9 @@ pub fn load_config(explicit_path: Option<&Path>) -> Result<AppConfig> {
         let path = PathBuf::from(env_path);
         if path.is_file() {
             let config = read_config_file(&path)?;
+            let abs_path = fs::canonicalize(&path).unwrap_or(path);
             return Ok(AppConfig {
-                config_path: Some(path),
+                config_path: Some(abs_path),
                 file: config,
             });
         }
