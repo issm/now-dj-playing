@@ -197,11 +197,12 @@ fn do_join(endpoint_url: &str, dj_name: &str, code: &str) -> Result<SessionInfo>
 
 /// publish API を呼び出す
 fn do_publish(endpoint_url: &str, session: &SessionInfo, meta: &TrackMeta) -> Result<()> {
-    // アートワークを Base64 Data URI にエンコード
-    let artwork_data_uri = meta.artwork.as_ref().map(|art| {
-        let b64 = base64::engine::general_purpose::STANDARD.encode(&art.data);
-        format!("data:{};base64,{}", art.mime, b64)
-    });
+    // アートワークをリサイズ + Base64 Data URI にエンコード
+    let artwork_data_uri = meta
+        .artwork
+        .as_ref()
+        .map(|art| resize_and_encode_artwork(art))
+        .transpose()?;
 
     let now = Local::now().fixed_offset();
     let updated_at = now.to_rfc3339();
@@ -249,4 +250,71 @@ fn save_session_file(path: &Path, session: &SessionInfo) -> Result<()> {
 /// エラーが 401 Unauthorized かどうか判定する
 fn is_unauthorized_error(e: &anyhow::Error) -> bool {
     e.to_string().contains("HTTP 401")
+}
+
+/// アートワーク画像の最大辺 (px)
+const ARTWORK_MAX_DIMENSION: u32 = 800;
+
+/// アートワークを 640x640 に収まるようリサイズし、Base64 Data URI を返す
+/// 元の画像形式 (JPEG/PNG) を維持する
+fn resize_and_encode_artwork(art: &crate::tags::ArtworkData) -> Result<String> {
+    use image::ImageReader;
+    use std::io::Cursor;
+
+    let img = ImageReader::new(Cursor::new(&art.data))
+        .with_guessed_format()
+        .context("アートワーク画像フォーマットの判定に失敗")?
+        .decode()
+        .context("アートワーク画像のデコードに失敗")?;
+
+    let (w, h) = (img.width(), img.height());
+
+    let resized = if w > ARTWORK_MAX_DIMENSION || h > ARTWORK_MAX_DIMENSION {
+        img.resize(
+            ARTWORK_MAX_DIMENSION,
+            ARTWORK_MAX_DIMENSION,
+            image::imageops::FilterType::Lanczos3,
+        )
+    } else {
+        img
+    };
+
+    // 元の形式を維持してエンコード
+    let (format, mime) = if art.mime.contains("png") {
+        (image::ImageFormat::Png, "image/png")
+    } else {
+        (image::ImageFormat::Jpeg, "image/jpeg")
+    };
+
+    let mut buf = Vec::new();
+    let mut cursor = Cursor::new(&mut buf);
+    resized
+        .write_to(&mut cursor, format)
+        .context("アートワーク画像の再エンコードに失敗")?;
+
+    let b64 = base64::engine::general_purpose::STANDARD.encode(&buf);
+    let ext_label = if art.mime.contains("png") {
+        "PNG"
+    } else {
+        "JPEG"
+    };
+
+    eprintln!(
+        "  アートワーク (送信): {} {}x{} ({})",
+        ext_label,
+        resized.width(),
+        resized.height(),
+        format_size(buf.len())
+    );
+
+    Ok(format!("data:{};base64,{}", mime, b64))
+}
+
+/// バイト数を適切な単位で表示する
+fn format_size(bytes: usize) -> String {
+    if bytes >= 1_048_576 {
+        format!("{:.1} MB", bytes as f64 / 1_048_576.0)
+    } else {
+        format!("{:.1} KB", bytes as f64 / 1_024.0)
+    }
 }

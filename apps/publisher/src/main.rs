@@ -8,6 +8,8 @@ use std::path::PathBuf;
 use anyhow::Result;
 use clap::{ArgAction, Parser};
 
+use tags::TrackMeta;
+
 #[derive(Parser)]
 #[command(name = "ndp-publish")]
 #[command(
@@ -88,6 +90,7 @@ fn main() -> Result<()> {
                 anyhow::bail!("楽曲ファイルが見つかりません: {}", file.display());
             }
             let meta = tags::read_tags(&file)?;
+            print_artwork_info(&meta);
             web::publish_web(&config, &meta, &dj_name, cli.code.as_deref())?;
         }
     } else {
@@ -99,6 +102,7 @@ fn main() -> Result<()> {
             anyhow::bail!("楽曲ファイルが見つかりません: {}", file.display());
         }
         let meta = tags::read_tags(&file)?;
+        print_artwork_info(&meta);
 
         let out = cli
             .out
@@ -118,4 +122,53 @@ fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+/// アートワークの寸法とサイズを stderr に出力する
+fn print_artwork_info(meta: &TrackMeta) {
+    match &meta.artwork {
+        Some(artwork) => {
+            let size = artwork.data.len();
+            let size_str = format_size(size);
+            let ext = mime_to_ext(&artwork.mime);
+
+            // imagesize で寸法を取得
+            match imagesize::blob_size(&artwork.data) {
+                Ok(dim) => {
+                    eprintln!(
+                        "  アートワーク: {} {}x{} ({})",
+                        ext, dim.width, dim.height, size_str
+                    );
+                }
+                Err(_) => {
+                    eprintln!("  アートワーク: {} 寸法不明 ({})", ext, size_str);
+                }
+            }
+        }
+        None => {
+            eprintln!("  アートワーク: なし");
+        }
+    }
+}
+
+/// MIME タイプから拡張子を返す
+fn mime_to_ext(mime: &str) -> &str {
+    if mime.contains("png") {
+        "PNG"
+    } else if mime.contains("jpeg") || mime.contains("jpg") {
+        "JPEG"
+    } else if mime.contains("bmp") {
+        "BMP"
+    } else {
+        "不明"
+    }
+}
+
+/// バイト数を適切な単位で表示する
+fn format_size(bytes: usize) -> String {
+    if bytes >= 1_048_576 {
+        format!("{:.1} MB", bytes as f64 / 1_048_576.0)
+    } else {
+        format!("{:.1} KB", bytes as f64 / 1_024.0)
+    }
 }

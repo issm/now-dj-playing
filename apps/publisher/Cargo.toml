@@ -11,6 +11,8 @@ chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4", features = ["derive"] }
 dirs = "5"
 id3 = "1.13"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+imagesize = "0.13"
 mp4ameta = "0.11"
 reqwest = { version = "0.12", features = ["blocking", "json"] }
 serde = { version = "1", features = ["derive"] }

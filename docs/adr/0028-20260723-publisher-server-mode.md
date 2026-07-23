@@ -144,6 +144,8 @@ CLI 引数は設定ファイルの値よりも優先される（override 方式�
 
 - Base64 Data URI (`data:image/jpeg;base64,...`) としてリクエストボディに含める
 - ADR-0025 の publish API 仕様に準拠
+- web モードでは送信前に 800x800 px に収まるようリサイズする（アスペクト比維持、元の画像形式を維持）
+- リサイズ不要（800px 以下）の場合はそのままエンコード
 - サイズ制限は publisher 側では設けない
 - ndp-server 側の body size limit (axum デフォルト 2 MiB) を超える場合は 413 エラーとなる（サーバ側で引き上げが必要）
 
