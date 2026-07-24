@@ -325,11 +325,11 @@ function App() {
 
         {/* トラック情報 or プレースホルダー */}
         {lastTrack ? (
-          <div className="relative z-10 flex flex-col items-center justify-end h-full pb-3 px-2">
-            <p className="text-white text-xs font-bold text-center truncate w-full">
+          <div className="relative z-10 flex flex-col gap-1 justify-end h-full pb-3 px-2 w-full">
+            <p className="text-white text-sm font-bold text-left break-words">
               {lastTrack.title}
             </p>
-            <p className="text-gray-300 text-[10px] text-center truncate w-full">
+            <p className="text-gray-300 text-xs text-left break-words">
               {lastTrack.artist}
             </p>
           </div>
