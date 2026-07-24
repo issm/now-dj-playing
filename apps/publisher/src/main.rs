@@ -1,14 +1,12 @@
-mod config;
-mod local;
-mod tags;
-mod web;
-
 use std::path::PathBuf;
 
 use anyhow::Result;
 use clap::{ArgAction, Parser};
 
-use tags::TrackMeta;
+use ndp_publish::config;
+use ndp_publish::local;
+use ndp_publish::tags::{self, TrackMeta};
+use ndp_publish::web;
 
 #[derive(Parser)]
 #[command(name = "ndp-publish")]
@@ -132,7 +130,6 @@ fn print_artwork_info(meta: &TrackMeta) {
             let size_str = format_size(size);
             let ext = mime_to_ext(&artwork.mime);
 
-            // imagesize で寸法を取得
             match imagesize::blob_size(&artwork.data) {
                 Ok(dim) => {
                     eprintln!(

@@ -4,6 +4,14 @@ version = "0.2.0"
 edition = "2021"
 description = "楽曲ファイルからタグ・アートワークを抽出し、共有ディレクトリまたは ndp-server に送信する CLI ツール"
 
+[lib]
+name = "ndp_publish"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ndp-publish"
+path = "src/main.rs"
+
 [dependencies]
 anyhow = "1"
 base64 = "0.22"
