@@ -2142,6 +2142,7 @@ dependencies = [
 name = "ndp-publish-gui"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "ndp-publish",
  "serde",
  "serde_json",

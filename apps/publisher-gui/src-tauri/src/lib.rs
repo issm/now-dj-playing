@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
+use base64::Engine;
 use serde::{Deserialize, Serialize};
 
 use ndp_publish::config::{self, AppConfig};
@@ -27,6 +28,15 @@ struct WebConfigResponse {
     endpoint_url: String,
 }
 
+/// publish 成功時にフロントに返すトラック情報
+#[derive(Debug, Serialize)]
+struct PublishResult {
+    title: String,
+    artist: String,
+    /// アートワークの Base64 Data URI (存在しない場合は None)
+    artwork: Option<String>,
+}
+
 /// アプリ状態
 struct AppState {
     config: Mutex<Option<AppConfig>>,
@@ -47,7 +57,6 @@ fn app_adjacent_config_path() -> Option<PathBuf> {
 /// 2. ndp_publish::config::load_config の通常ルックアップ
 #[tauri::command]
 fn load_config(state: tauri::State<AppState>) -> Result<ConfigResponse, String> {
-    // アプリ隣接を最優先で探す
     let config = if let Some(adjacent) = app_adjacent_config_path() {
         if adjacent.is_file() {
             config::load_config(Some(&adjacent)).map_err(|e| e.to_string())?
@@ -72,7 +81,6 @@ fn load_config(state: tauri::State<AppState>) -> Result<ConfigResponse, String> 
         },
     };
 
-    // 状態に保存
     *state.config_path.lock().unwrap() = config.config_path.clone();
     *state.config.lock().unwrap() = Some(config);
 
@@ -109,7 +117,6 @@ fn save_config(
     let json = serde_json::to_string_pretty(&config_content).map_err(|e| e.to_string())?;
     std::fs::write(&path, json).map_err(|e| format!("保存に失敗: {}", e))?;
 
-    // 新規作成時は config_path を更新
     *state.config_path.lock().unwrap() = Some(path);
 
     Ok(())
@@ -126,8 +133,6 @@ fn join_session(
     let config_guard = state.config.lock().unwrap();
     let config = config_guard.as_ref().ok_or("設定が読み込まれていません")?;
 
-    // UI の endpoint_url が入力されていれば環境変数経由でオーバーライド
-    // (web::join_only は config から endpoint_url を取得するため)
     if !endpoint_url.is_empty() {
         std::env::set_var("NDP_PUBLISH_ENDPOINT_URL", &endpoint_url);
     }
@@ -146,7 +151,7 @@ fn publish(
     code: Option<String>,
     dj_id: String,
     publish_base_dir: String,
-) -> Result<(), String> {
+) -> Result<PublishResult, String> {
     let path = Path::new(&file_path);
     if !path.is_file() {
         return Err(format!("ファイルが見つかりません: {}", file_path));
@@ -154,17 +159,23 @@ fn publish(
 
     let meta = tags::read_tags(path).map_err(|e| e.to_string())?;
 
+    // アートワークの Data URI を生成（フロント表示用）
+    let artwork_data_uri = meta.artwork.as_ref().map(|art| {
+        let b64 = base64::engine::general_purpose::STANDARD.encode(&art.data);
+        format!("data:{};base64,{}", art.mime, b64)
+    });
+
     match mode.as_str() {
         "web" => {
             let config_guard = state.config.lock().unwrap();
             let config = config_guard.as_ref().ok_or("設定が読み込まれていません")?;
 
-            // UI の endpoint_url をオーバーライド
             if !endpoint_url.is_empty() {
                 std::env::set_var("NDP_PUBLISH_ENDPOINT_URL", &endpoint_url);
             }
 
-            web::publish_web(config, &meta, &dj_name, code.as_deref()).map_err(|e| e.to_string())
+            web::publish_web(config, &meta, &dj_name, code.as_deref())
+                .map_err(|e| e.to_string())?;
         }
         "local" => {
             let out = PathBuf::from(shellexpand::tilde(&publish_base_dir).to_string());
@@ -173,10 +184,16 @@ fn publish(
             } else {
                 Some(dj_name.as_str())
             };
-            local::publish_local(&meta, &out, &dj_id, dj_name_opt).map_err(|e| e.to_string())
+            local::publish_local(&meta, &out, &dj_id, dj_name_opt).map_err(|e| e.to_string())?;
         }
-        _ => Err(format!("不明なモード: {}", mode)),
+        _ => return Err(format!("不明なモード: {}", mode)),
     }
+
+    Ok(PublishResult {
+        title: meta.title,
+        artist: meta.artist,
+        artwork: artwork_data_uri,
+    })
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

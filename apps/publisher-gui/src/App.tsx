@@ -11,11 +11,20 @@ interface Config {
   web: { endpoint_url: string };
 }
 
+interface PublishResult {
+  title: string;
+  artist: string;
+  artwork: string | null;
+}
+
 function App() {
   const [mode, setMode] = useState<Mode>("web");
   const [status, setStatus] = useState<Status>("idle");
   const [errorMsg, setErrorMsg] = useState("");
   const [isDragOver, setIsDragOver] = useState(false);
+
+  // 最後に publish 成功したトラック情報
+  const [lastTrack, setLastTrack] = useState<PublishResult | null>(null);
 
   // 共通
   const [djName, setDjName] = useState("");
@@ -47,7 +56,7 @@ function App() {
       setStatus("idle");
       setErrorMsg("");
       try {
-        await invoke("publish", {
+        const result = await invoke<PublishResult>("publish", {
           filePath,
           mode,
           djName,
@@ -57,6 +66,7 @@ function App() {
           publishBaseDir,
         });
         setStatus("success");
+        setLastTrack(result);
       } catch (err) {
         setStatus("error");
         setErrorMsg(String(err));
@@ -76,7 +86,6 @@ function App() {
           doPublish(paths[0]);
         }
       } else {
-        // cancel
         setIsDragOver(false);
       }
     });
@@ -201,12 +210,34 @@ function App() {
 
       {/* ドロップ領域 */}
       <div
-        className={`flex-1 flex items-center justify-center border-2 border-dashed rounded-lg transition-colors ${isDragOver
+        className={`relative flex-1 flex flex-col items-center justify-center border-2 border-dashed rounded-lg transition-colors overflow-hidden ${isDragOver
             ? "border-blue-400 bg-blue-900/30"
             : "border-gray-600 bg-gray-800/50"
           }`}
       >
-        <span className="text-gray-500 text-xs">ここにファイルをドロップ</span>
+        {/* アートワーク背景 */}
+        {lastTrack?.artwork && (
+          <div
+            className="absolute inset-0 bg-cover bg-center opacity-30"
+            style={{ backgroundImage: `url(${lastTrack.artwork})` }}
+          />
+        )}
+
+        {/* トラック情報 or プレースホルダー */}
+        {lastTrack ? (
+          <div className="relative z-10 flex flex-col items-center justify-end h-full pb-3 px-2">
+            <p className="text-white text-xs font-bold text-center truncate w-full">
+              {lastTrack.title}
+            </p>
+            <p className="text-gray-300 text-[10px] text-center truncate w-full">
+              {lastTrack.artist}
+            </p>
+          </div>
+        ) : (
+          <span className="text-gray-500 text-xs relative z-10">
+            ここにファイルをドロップ
+          </span>
+        )}
       </div>
 
       {/* ステータス */}
