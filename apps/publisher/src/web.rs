@@ -48,6 +48,61 @@ struct PublishRequest {
     updated_at: String,
 }
 
+/// セッションから離脱する (-L, --leave)
+pub fn leave(config: &AppConfig) -> Result<()> {
+    let endpoint_url = config.web_endpoint_url().ok_or_else(|| {
+        anyhow::anyhow!(
+            "エンドポイント URL が未指定です。設定ファイルの web.endpoint_url を設定してください"
+        )
+    })?;
+
+    let session_path = config.session_file_path().ok_or_else(|| {
+        anyhow::anyhow!(
+            "セッションファイルの保存先を特定できません。-c で設定ファイルを指定するか、NDP_PUBLISH_SESSION_DIR を設定してください"
+        )
+    })?;
+
+    // セッションファイルの読み込み
+    let content = fs::read_to_string(&session_path).with_context(|| {
+        format!(
+            "セッションファイルが見つかりません: {}",
+            session_path.display()
+        )
+    })?;
+    let session: SessionInfo =
+        serde_json::from_str(&content).context("セッションファイルのパースに失敗")?;
+
+    // leave API 呼び出し
+    let leave_url = format!(
+        "{}/sessions/{}/leave",
+        endpoint_url.trim_end_matches('/'),
+        session.session_id
+    );
+
+    let client = reqwest::blocking::Client::new();
+    let response = client
+        .post(&leave_url)
+        .header("Authorization", format!("Bearer {}", session.token))
+        .send()
+        .with_context(|| format!("leave リクエストの送信に失敗: {}", leave_url))?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let error_text = response.text().unwrap_or_default();
+        anyhow::bail!("leave に失敗 (HTTP {}): {}", status.as_u16(), error_text);
+    }
+
+    // セッションファイルを削除
+    fs::remove_file(&session_path)
+        .with_context(|| format!("セッションファイルの削除に失敗: {}", session_path.display()))?;
+
+    eprintln!("✅ セッション離脱完了");
+    eprintln!("   session_id:   {}", session.session_id);
+    eprintln!("   publisher_id: {}", session.publisher_id);
+
+    Ok(())
+}
+
 /// join のみ実行して終了する (-J, --join-only)
 pub fn join_only(config: &AppConfig, dj_name: &str, code: Option<&str>) -> Result<()> {
     let endpoint_url = config.web_endpoint_url().ok_or_else(|| {
