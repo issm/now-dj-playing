@@ -136,8 +136,15 @@ function App() {
   };
 
   const handleLeave = async () => {
-    // TODO: leave API が実装されたら呼び出す
-    setJoined(false);
+    try {
+      await invoke("leave_session");
+      setJoined(false);
+      setCode("");
+    } catch (_) {
+      // leave 失敗時も UI 上は離脱扱いにする（セッション無効の可能性）
+      setJoined(false);
+      setCode("");
+    }
   };
 
   const handleReloadConfig = async () => {

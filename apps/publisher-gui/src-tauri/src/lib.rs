@@ -3,6 +3,7 @@ use std::sync::Mutex;
 
 use base64::Engine;
 use serde::{Deserialize, Serialize};
+use tauri::Manager;
 
 use ndp_publish::config::{self, AppConfig};
 use ndp_publish::local;
@@ -140,6 +141,15 @@ fn join_session(
     web::join_only(config, &dj_name, Some(&code)).map_err(|e| e.to_string())
 }
 
+/// セッションから離脱する (web モード)
+#[tauri::command]
+fn leave_session(state: tauri::State<AppState>) -> Result<(), String> {
+    let config_guard = state.config.lock().unwrap();
+    let config = config_guard.as_ref().ok_or("設定が読み込まれていません")?;
+
+    web::leave(config).map_err(|e| e.to_string())
+}
+
 /// ファイルを publish する
 #[tauri::command]
 fn publish(
@@ -255,7 +265,7 @@ fn check_dir_exists(path: String) -> bool {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_log::Builder::default().build())
         .manage(AppState {
@@ -266,11 +276,49 @@ pub fn run() {
             load_config,
             save_config,
             join_session,
+            leave_session,
             publish,
             check_dir_exists,
             open_config_folder,
             get_version,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    app.run(|app_handle, event| {
+        if let tauri::RunEvent::Exit = event {
+            // アプリ終了時: セッションファイルが存在すれば leave を試行（ベストエフォート）
+            leave_on_exit(app_handle);
+        }
+    });
+}
+
+/// アプリ終了時にセッションから離脱する（ベストエフォート）
+///
+/// セッションファイルが存在しなければ何もしない。
+/// ネットワークエラー等で失敗しても無視してアプリを終了させる。
+fn leave_on_exit(app_handle: &tauri::AppHandle) {
+    let state: tauri::State<AppState> = app_handle.state();
+    let config_guard = state.config.lock().unwrap();
+    let config = match config_guard.as_ref() {
+        Some(c) => c,
+        None => return,
+    };
+
+    // セッションファイルが存在するか確認
+    let session_path = match config.session_file_path() {
+        Some(p) if p.is_file() => p,
+        _ => return,
+    };
+
+    eprintln!("  終了時 leave を試行: {}", session_path.display());
+
+    // タイムアウト付きで leave を実行（最大 3 秒）
+    let _ = std::thread::scope(|s| {
+        let handle = s.spawn(|| {
+            let _ = web::leave(config);
+        });
+        // 3 秒待って終了（join が返らなくてもスコープ終了でスレッドは破棄される）
+        let _ = handle.join();
+    });
 }
