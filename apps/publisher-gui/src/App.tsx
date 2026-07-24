@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 
 type Mode = "web" | "local";
 type Status = "idle" | "success" | "error";
@@ -40,19 +41,11 @@ function App() {
       .catch(() => { });
   }, []);
 
-  const handleDrop = useCallback(
-    async (e: React.DragEvent) => {
-      e.preventDefault();
-      setIsDragOver(false);
+  // Tauri ドロップイベントの登録
+  const doPublish = useCallback(
+    async (filePath: string) => {
       setStatus("idle");
       setErrorMsg("");
-
-      const files = e.dataTransfer.files;
-      if (files.length === 0) return;
-
-      const filePath = (files[0] as unknown as { path?: string }).path;
-      if (!filePath) return;
-
       try {
         await invoke("publish", {
           filePath,
@@ -71,6 +64,27 @@ function App() {
     },
     [mode, djName, endpointUrl, code, djId, publishBaseDir],
   );
+
+  useEffect(() => {
+    const unlisten = getCurrentWebview().onDragDropEvent((event) => {
+      if (event.payload.type === "over") {
+        setIsDragOver(true);
+      } else if (event.payload.type === "drop") {
+        setIsDragOver(false);
+        const paths = event.payload.paths;
+        if (paths.length > 0) {
+          doPublish(paths[0]);
+        }
+      } else {
+        // cancel
+        setIsDragOver(false);
+      }
+    });
+
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, [doPublish]);
 
   const handleJoin = async () => {
     setStatus("idle");
@@ -191,12 +205,6 @@ function App() {
             ? "border-blue-400 bg-blue-900/30"
             : "border-gray-600 bg-gray-800/50"
           }`}
-        onDragOver={(e) => {
-          e.preventDefault();
-          setIsDragOver(true);
-        }}
-        onDragLeave={() => setIsDragOver(false)}
-        onDrop={handleDrop}
       >
         <span className="text-gray-500 text-xs">ここにファイルをドロップ</span>
       </div>
