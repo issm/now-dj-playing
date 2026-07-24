@@ -33,11 +33,30 @@ struct AppState {
     config_path: Mutex<Option<PathBuf>>,
 }
 
+/// アプリ実行ファイルの隣接ディレクトリを取得する
+fn app_adjacent_config_path() -> Option<PathBuf> {
+    std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|dir| dir.join("ndp-publish.config.json")))
+}
+
 /// 設定ファイルを読み込む
+///
+/// ルックアップ優先順:
+/// 1. アプリ隣接の ndp-publish.config.json
+/// 2. ndp_publish::config::load_config の通常ルックアップ
 #[tauri::command]
 fn load_config(state: tauri::State<AppState>) -> Result<ConfigResponse, String> {
-    // アプリ隣接の設定ファイルを最優先で探す
-    let config = config::load_config(None).map_err(|e| e.to_string())?;
+    // アプリ隣接を最優先で探す
+    let config = if let Some(adjacent) = app_adjacent_config_path() {
+        if adjacent.is_file() {
+            config::load_config(Some(&adjacent)).map_err(|e| e.to_string())?
+        } else {
+            config::load_config(None).map_err(|e| e.to_string())?
+        }
+    } else {
+        config::load_config(None).map_err(|e| e.to_string())?
+    };
 
     let response = ConfigResponse {
         dj_name: config.dj_name().unwrap_or_default(),
@@ -61,6 +80,8 @@ fn load_config(state: tauri::State<AppState>) -> Result<ConfigResponse, String> 
 }
 
 /// 設定ファイルを保存する
+///
+/// config_path が None の場合はアプリ隣接に新規作成する
 #[tauri::command]
 fn save_config(
     state: tauri::State<AppState>,
@@ -70,7 +91,9 @@ fn save_config(
     endpoint_url: String,
 ) -> Result<(), String> {
     let config_path = state.config_path.lock().unwrap().clone();
-    let path = config_path.ok_or("設定ファイルのパスが不明です")?;
+    let path = config_path
+        .or_else(app_adjacent_config_path)
+        .ok_or("設定ファイルの保存先を特定できません")?;
 
     let config_content = serde_json::json!({
         "dj_name": dj_name,
@@ -86,6 +109,9 @@ fn save_config(
     let json = serde_json::to_string_pretty(&config_content).map_err(|e| e.to_string())?;
     std::fs::write(&path, json).map_err(|e| format!("保存に失敗: {}", e))?;
 
+    // 新規作成時は config_path を更新
+    *state.config_path.lock().unwrap() = Some(path);
+
     Ok(())
 }
 
@@ -93,12 +119,18 @@ fn save_config(
 #[tauri::command]
 fn join_session(
     state: tauri::State<AppState>,
-    _endpoint_url: String,
+    endpoint_url: String,
     code: String,
     dj_name: String,
 ) -> Result<(), String> {
     let config_guard = state.config.lock().unwrap();
     let config = config_guard.as_ref().ok_or("設定が読み込まれていません")?;
+
+    // UI の endpoint_url が入力されていれば環境変数経由でオーバーライド
+    // (web::join_only は config から endpoint_url を取得するため)
+    if !endpoint_url.is_empty() {
+        std::env::set_var("NDP_PUBLISH_ENDPOINT_URL", &endpoint_url);
+    }
 
     web::join_only(config, &dj_name, Some(&code)).map_err(|e| e.to_string())
 }
@@ -110,7 +142,7 @@ fn publish(
     file_path: String,
     mode: String,
     dj_name: String,
-    _endpoint_url: String,
+    endpoint_url: String,
     code: Option<String>,
     dj_id: String,
     publish_base_dir: String,
@@ -126,6 +158,11 @@ fn publish(
         "web" => {
             let config_guard = state.config.lock().unwrap();
             let config = config_guard.as_ref().ok_or("設定が読み込まれていません")?;
+
+            // UI の endpoint_url をオーバーライド
+            if !endpoint_url.is_empty() {
+                std::env::set_var("NDP_PUBLISH_ENDPOINT_URL", &endpoint_url);
+            }
 
             web::publish_web(config, &meta, &dj_name, code.as_deref()).map_err(|e| e.to_string())
         }

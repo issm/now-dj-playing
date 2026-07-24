@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 
 type Mode = "web" | "local";
@@ -28,15 +28,17 @@ function App() {
   const [publishBaseDir, setPublishBaseDir] = useState("");
 
   // 起動時に config を読み込み
-  useState(() => {
-    invoke<Config>("load_config").then((config) => {
-      if (config.dj_name) setDjName(config.dj_name);
-      if (config.local?.dj_id) setDjId(config.local.dj_id);
-      if (config.local?.publish_base_dir)
-        setPublishBaseDir(config.local.publish_base_dir);
-      if (config.web?.endpoint_url) setEndpointUrl(config.web.endpoint_url);
-    }).catch(() => {});
-  });
+  useEffect(() => {
+    invoke<Config>("load_config")
+      .then((config) => {
+        if (config.dj_name) setDjName(config.dj_name);
+        if (config.local?.dj_id) setDjId(config.local.dj_id);
+        if (config.local?.publish_base_dir)
+          setPublishBaseDir(config.local.publish_base_dir);
+        if (config.web?.endpoint_url) setEndpointUrl(config.web.endpoint_url);
+      })
+      .catch(() => { });
+  }, []);
 
   const handleDrop = useCallback(
     async (e: React.DragEvent) => {
@@ -90,7 +92,7 @@ function App() {
       if (config.local?.publish_base_dir)
         setPublishBaseDir(config.local.publish_base_dir);
       if (config.web?.endpoint_url) setEndpointUrl(config.web.endpoint_url);
-    } catch {}
+    } catch { }
   };
 
   const handleSaveConfig = async () => {
@@ -101,7 +103,7 @@ function App() {
         publishBaseDir,
         endpointUrl,
       });
-    } catch {}
+    } catch { }
   };
 
   return (
@@ -185,11 +187,10 @@ function App() {
 
       {/* ドロップ領域 */}
       <div
-        className={`flex-1 flex items-center justify-center border-2 border-dashed rounded-lg transition-colors ${
-          isDragOver
+        className={`flex-1 flex items-center justify-center border-2 border-dashed rounded-lg transition-colors ${isDragOver
             ? "border-blue-400 bg-blue-900/30"
             : "border-gray-600 bg-gray-800/50"
-        }`}
+          }`}
         onDragOver={(e) => {
           e.preventDefault();
           setIsDragOver(true);
@@ -201,14 +202,19 @@ function App() {
       </div>
 
       {/* ステータス */}
-      <div className="h-6 flex items-center justify-center">
+      <div className="min-h-[24px] flex items-center justify-center">
         {status === "success" && (
           <span className="text-green-400 text-xs font-bold">● 成功</span>
         )}
         {status === "error" && (
-          <span className="text-red-400 text-xs font-bold" title={errorMsg}>
-            ● 失敗
-          </span>
+          <div className="text-center">
+            <span className="text-red-400 text-xs font-bold">● 失敗</span>
+            {errorMsg && (
+              <p className="text-red-300 text-[10px] mt-0.5 truncate max-w-full">
+                {errorMsg}
+              </p>
+            )}
+          </div>
         )}
       </div>
 
