@@ -256,6 +256,14 @@ function App() {
                 return next;
             });
         },
+        onDjLeft: (dj) => {
+            setRoster((prev) => {
+                if (!prev.has(dj.id)) return prev;
+                const next = new Map(prev);
+                next.delete(dj.id);
+                return next;
+            });
+        },
     });
 
     // モニタウィンドウの場合はコンパクト表示
