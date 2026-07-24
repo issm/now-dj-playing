@@ -196,9 +196,17 @@ fn publish(
     })
 }
 
+/// ディレクトリが存在するか確認する
+#[tauri::command]
+fn check_dir_exists(path: String) -> bool {
+    let expanded = shellexpand::tilde(&path).to_string();
+    Path::new(&expanded).is_dir()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_log::Builder::default().build())
         .manage(AppState {
             config: Mutex::new(None),
@@ -209,6 +217,7 @@ pub fn run() {
             save_config,
             join_session,
             publish,
+            check_dir_exists,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

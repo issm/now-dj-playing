@@ -1,9 +1,10 @@
 import { useState, useCallback, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { open } from "@tauri-apps/plugin-dialog";
 
 type Mode = "web" | "local";
-type Status = "idle" | "success" | "error";
+type PublishStatus = "idle" | "success" | "error";
 
 interface Config {
   dj_name: string;
@@ -17,14 +18,24 @@ interface PublishResult {
   artwork: string | null;
 }
 
+/** 入力値の OK/NG に応じたボーダー色を返す */
+function inputBorder(valid: boolean): string {
+  return valid ? "border-green-600" : "border-red-600";
+}
+
 function App() {
   const [mode, setMode] = useState<Mode>("web");
-  const [status, setStatus] = useState<Status>("idle");
-  const [errorMsg, setErrorMsg] = useState("");
   const [isDragOver, setIsDragOver] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
-  // 最後に publish 成功したトラック情報
+  // publish 結果 (ドロップ領域に連動)
+  const [publishStatus, setPublishStatus] = useState<PublishStatus>("idle");
+  const [publishError, setPublishError] = useState("");
   const [lastTrack, setLastTrack] = useState<PublishResult | null>(null);
+
+  // join 結果 (認証コードに連動)
+  const [joined, setJoined] = useState(false);
+  const [joinFailed, setJoinFailed] = useState(false);
 
   // 共通
   const [djName, setDjName] = useState("");
@@ -36,6 +47,7 @@ function App() {
   // local モード
   const [djId, setDjId] = useState("dj-000");
   const [publishBaseDir, setPublishBaseDir] = useState("");
+  const [publishBaseDirExists, setPublishBaseDirExists] = useState(false);
 
   // 起動時に config を読み込み
   useEffect(() => {
@@ -50,11 +62,22 @@ function App() {
       .catch(() => { });
   }, []);
 
+  // 出力先ディレクトリの存在確認
+  useEffect(() => {
+    if (publishBaseDir) {
+      invoke<boolean>("check_dir_exists", { path: publishBaseDir }).then(
+        setPublishBaseDirExists,
+      );
+    } else {
+      setPublishBaseDirExists(false);
+    }
+  }, [publishBaseDir]);
+
   // Tauri ドロップイベントの登録
   const doPublish = useCallback(
     async (filePath: string) => {
-      setStatus("idle");
-      setErrorMsg("");
+      setPublishStatus("idle");
+      setPublishError("");
       try {
         const result = await invoke<PublishResult>("publish", {
           filePath,
@@ -65,11 +88,11 @@ function App() {
           djId,
           publishBaseDir,
         });
-        setStatus("success");
+        setPublishStatus("success");
         setLastTrack(result);
       } catch (err) {
-        setStatus("error");
-        setErrorMsg(String(err));
+        setPublishStatus("error");
+        setPublishError(String(err));
       }
     },
     [mode, djName, endpointUrl, code, djId, publishBaseDir],
@@ -96,15 +119,18 @@ function App() {
   }, [doPublish]);
 
   const handleJoin = async () => {
-    setStatus("idle");
-    setErrorMsg("");
+    setJoinFailed(false);
     try {
       await invoke("join_session", { endpointUrl, code, djName });
-      setStatus("success");
-    } catch (err) {
-      setStatus("error");
-      setErrorMsg(String(err));
+      setJoined(true);
+    } catch (_) {
+      setJoinFailed(true);
     }
+  };
+
+  const handleLeave = async () => {
+    // TODO: leave API が実装されたら呼び出す
+    setJoined(false);
   };
 
   const handleReloadConfig = async () => {
@@ -129,19 +155,12 @@ function App() {
     } catch { }
   };
 
+  // web モードで join 済みの場合、入力を無効化
+  const webInputDisabled = mode === "web" && joined;
+
   return (
     <div className="flex flex-col h-screen p-3 gap-2 text-sm">
-      {/* DJ 名 */}
-      <div className="flex items-center gap-2">
-        <label className="shrink-0 text-xs text-gray-400">DJ 名</label>
-        <input
-          className="flex-1 bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs"
-          value={djName}
-          onChange={(e) => setDjName(e.target.value)}
-        />
-      </div>
-
-      {/* モードタブ */}
+      {/* モードタブ + メニュー */}
       <div className="flex gap-1">
         <button
           className={`flex-1 py-1 rounded text-xs font-bold ${mode === "web" ? "bg-blue-600" : "bg-gray-700"}`}
@@ -155,35 +174,83 @@ function App() {
         >
           local
         </button>
+        <div className="relative">
+          <button
+            className="px-2 py-1 rounded text-xs bg-gray-700 hover:bg-gray-600"
+            onClick={() => setMenuOpen(!menuOpen)}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+          {menuOpen && (
+            <div className="absolute right-0 top-full mt-1 bg-gray-800 border border-gray-600 rounded shadow-lg z-50 min-w-[140px]">
+              <button
+                className="w-full text-left px-3 py-2 text-xs hover:bg-gray-700"
+                onClick={() => { handleReloadConfig(); setMenuOpen(false); }}
+              >
+                Config リロード
+              </button>
+              <button
+                className="w-full text-left px-3 py-2 text-xs hover:bg-gray-700"
+                onClick={() => { handleSaveConfig(); setMenuOpen(false); }}
+              >
+                Config 保存
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* DJ 名 */}
+      <div className="flex items-center gap-2">
+        <label className="shrink-0 text-xs text-gray-400">DJ 名</label>
+        <input
+          className={`flex-1 bg-gray-800 border rounded px-2 py-1 text-xs ${inputBorder(djName.length > 0)} ${webInputDisabled ? "opacity-50" : ""}`}
+          value={djName}
+          onChange={(e) => setDjName(e.target.value)}
+          disabled={webInputDisabled}
+        />
       </div>
 
       {/* モード設定 */}
       {mode === "web" ? (
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-2">
-            <label className="shrink-0 text-xs text-gray-400">EP</label>
+            <label className="shrink-0 text-xs text-gray-400">エンドポイント</label>
             <input
-              className="flex-1 bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs"
+              className={`flex-1 bg-gray-800 border rounded px-2 py-1 text-xs ${inputBorder(endpointUrl.length > 0)} ${webInputDisabled ? "opacity-50" : ""}`}
               placeholder="http://localhost:8080/api"
               value={endpointUrl}
               onChange={(e) => setEndpointUrl(e.target.value)}
+              disabled={webInputDisabled}
             />
           </div>
           <div className="flex items-center gap-2">
-            <label className="shrink-0 text-xs text-gray-400">Code</label>
+            <label className="shrink-0 text-xs text-gray-400">認証コード</label>
             <input
-              className="flex-1 bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs"
+              className={`flex-1 bg-gray-800 border rounded px-2 py-1 text-xs ${joined ? "border-green-600 opacity-50" : joinFailed ? "border-red-600" : "border-gray-600"}`}
               placeholder="000000"
               maxLength={6}
               value={code}
-              onChange={(e) => setCode(e.target.value)}
+              onChange={(e) => { setCode(e.target.value); setJoinFailed(false); }}
+              disabled={webInputDisabled}
             />
-            <button
-              className="bg-green-700 hover:bg-green-600 px-2 py-1 rounded text-xs"
-              onClick={handleJoin}
-            >
-              Join
-            </button>
+            {joined ? (
+              <button
+                className="bg-red-700 hover:bg-red-600 px-2 py-1 rounded text-xs"
+                onClick={handleLeave}
+              >
+                Leave
+              </button>
+            ) : (
+              <button
+                className="bg-green-700 hover:bg-green-600 px-2 py-1 rounded text-xs"
+                onClick={handleJoin}
+              >
+                Join
+              </button>
+            )}
           </div>
         </div>
       ) : (
@@ -191,7 +258,7 @@ function App() {
           <div className="flex items-center gap-2">
             <label className="shrink-0 text-xs text-gray-400">DJ ID</label>
             <input
-              className="flex-1 bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs"
+              className={`flex-1 bg-gray-800 border rounded px-2 py-1 text-xs ${inputBorder(djId.length > 0)}`}
               value={djId}
               onChange={(e) => setDjId(e.target.value)}
             />
@@ -199,11 +266,20 @@ function App() {
           <div className="flex items-center gap-2">
             <label className="shrink-0 text-xs text-gray-400">出力先</label>
             <input
-              className="flex-1 bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs"
+              className={`flex-1 bg-gray-800 border rounded px-2 py-1 text-xs ${inputBorder(publishBaseDirExists)}`}
               placeholder="~/tmp/ndp"
               value={publishBaseDir}
               onChange={(e) => setPublishBaseDir(e.target.value)}
             />
+            <button
+              className="bg-gray-600 hover:bg-gray-500 px-2 py-1 rounded text-xs"
+              onClick={async () => {
+                const selected = await open({ directory: true });
+                if (selected) setPublishBaseDir(selected as string);
+              }}
+            >
+              ...
+            </button>
           </div>
         </div>
       )}
@@ -212,7 +288,11 @@ function App() {
       <div
         className={`relative flex-1 flex flex-col items-center justify-center border-2 border-dashed rounded-lg transition-colors overflow-hidden ${isDragOver
             ? "border-blue-400 bg-blue-900/30"
-            : "border-gray-600 bg-gray-800/50"
+            : publishStatus === "success"
+              ? "border-green-500 bg-gray-800/50"
+              : publishStatus === "error"
+                ? "border-red-500 bg-gray-800/50"
+                : "border-gray-600 bg-gray-800/50"
           }`}
       >
         {/* アートワーク背景 */}
@@ -240,38 +320,12 @@ function App() {
         )}
       </div>
 
-      {/* ステータス */}
-      <div className="min-h-[24px] flex items-center justify-center">
-        {status === "success" && (
-          <span className="text-green-400 text-xs font-bold">● 成功</span>
-        )}
-        {status === "error" && (
-          <div className="text-center">
-            <span className="text-red-400 text-xs font-bold">● 失敗</span>
-            {errorMsg && (
-              <p className="text-red-300 text-[10px] mt-0.5 truncate max-w-full">
-                {errorMsg}
-              </p>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Config ボタン */}
-      <div className="flex gap-2">
-        <button
-          className="flex-1 bg-gray-700 hover:bg-gray-600 py-1 rounded text-xs"
-          onClick={handleReloadConfig}
-        >
-          Config リロード
-        </button>
-        <button
-          className="flex-1 bg-gray-700 hover:bg-gray-600 py-1 rounded text-xs"
-          onClick={handleSaveConfig}
-        >
-          Config 保存
-        </button>
-      </div>
+      {/* publish エラー時のみメッセージ表示 */}
+      {publishStatus === "error" && publishError && (
+        <p className="text-red-300 text-[10px] truncate max-w-full text-center">
+          {publishError}
+        </p>
+      )}
     </div>
   );
 }

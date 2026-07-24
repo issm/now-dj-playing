@@ -8,3 +8,7 @@ body {
   overflow: hidden;
   user-select: none;
 }
+
+input {
+  outline: none;
+}

@@ -1,8 +1,11 @@
 {
   "identifier": "default",
   "description": "default permissions",
-  "windows": ["main"],
+  "windows": [
+    "main"
+  ],
   "permissions": [
-    "core:default"
+    "core:default",
+    "dialog:default"
   ]
 }
