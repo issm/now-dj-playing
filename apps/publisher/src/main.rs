@@ -35,6 +35,10 @@ struct Cli {
     #[arg(short = 'J', long = "join-only")]
     join_only: bool,
 
+    /// セッションから離脱する（web モード）
+    #[arg(short = 'L', long = "leave")]
+    leave: bool,
+
     /// 楽曲ファイルのパス (mp3, m4a)
     #[arg(short, long)]
     file: Option<PathBuf>,
@@ -67,20 +71,16 @@ fn main() -> Result<()> {
 
     if cli.web_mode {
         // web モード
-        let dj_name = cli
-            .dj_name
-            .or_else(|| config.dj_name())
-            .ok_or_else(|| {
-                anyhow::anyhow!(
-                    "DJ 名が未指定です。--dj-name を指定するか、設定ファイルの dj_name を設定してください"
-                )
-            })?;
-
-        if cli.join_only {
+        if cli.leave {
+            // -L: セッションから離脱して終了
+            web::leave(&config)?;
+        } else if cli.join_only {
             // -J: join のみ実行して終了
+            let dj_name = require_dj_name(&cli, &config)?;
             web::join_only(&config, &dj_name, cli.code.as_deref())?;
         } else {
             // 通常の web publish
+            let dj_name = require_dj_name(&cli, &config)?;
             let file = cli.file.ok_or_else(|| {
                 anyhow::anyhow!("楽曲ファイルが未指定です。--file を指定してください")
             })?;
@@ -120,6 +120,18 @@ fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+/// DJ 名を CLI 引数または設定ファイルから取得する
+fn require_dj_name(cli: &Cli, config: &config::AppConfig) -> Result<String> {
+    cli.dj_name
+        .clone()
+        .or_else(|| config.dj_name())
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "DJ 名が未指定です。--dj-name を指定するか、設定ファイルの dj_name を設定してください"
+            )
+        })
 }
 
 /// アートワークの寸法とサイズを stderr に出力する
