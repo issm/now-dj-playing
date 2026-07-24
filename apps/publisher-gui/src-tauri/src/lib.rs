@@ -196,6 +196,19 @@ fn publish(
     })
 }
 
+/// バージョン情報を返す
+#[derive(Debug, Serialize)]
+struct VersionInfo {
+    gui: String,
+}
+
+#[tauri::command]
+fn get_version() -> VersionInfo {
+    VersionInfo {
+        gui: env!("BUILD_VERSION_FULL").to_string(),
+    }
+}
+
 /// 設定ファイルのフォルダを OS のファイルマネージャで開く
 #[tauri::command]
 fn open_config_folder(state: tauri::State<AppState>) -> Result<(), String> {
@@ -256,6 +269,7 @@ pub fn run() {
             publish,
             check_dir_exists,
             open_config_folder,
+            get_version,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

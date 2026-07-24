@@ -49,7 +49,10 @@ function App() {
   const [publishBaseDir, setPublishBaseDir] = useState("");
   const [publishBaseDirExists, setPublishBaseDirExists] = useState(false);
 
-  // 起動時に config を読み込み
+  // バージョン情報
+  const [versionInfo, setVersionInfo] = useState<{ gui: string } | null>(null);
+
+  // 起動時に config とバージョンを読み込み
   useEffect(() => {
     invoke<Config>("load_config")
       .then((config) => {
@@ -59,6 +62,10 @@ function App() {
           setPublishBaseDir(config.local.publish_base_dir);
         if (config.web?.endpoint_url) setEndpointUrl(config.web.endpoint_url);
       })
+      .catch(() => { });
+
+    invoke<{ gui: string }>("get_version")
+      .then(setVersionInfo)
       .catch(() => { });
   }, []);
 
@@ -338,6 +345,13 @@ function App() {
         <p className="text-red-300 text-[10px] truncate max-w-full text-center">
           {publishError}
         </p>
+      )}
+
+      {/* バージョン情報 */}
+      {versionInfo && (
+        <div className="text-[9px] text-gray-500 text-right leading-tight">
+          <div>Version: {versionInfo.gui}</div>
+        </div>
       )}
     </div>
   );
