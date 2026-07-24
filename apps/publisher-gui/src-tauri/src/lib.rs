@@ -196,6 +196,43 @@ fn publish(
     })
 }
 
+/// 設定ファイルのフォルダを OS のファイルマネージャで開く
+#[tauri::command]
+fn open_config_folder(state: tauri::State<AppState>) -> Result<(), String> {
+    let config_path = state.config_path.lock().unwrap().clone();
+    let path = config_path
+        .or_else(app_adjacent_config_path)
+        .ok_or("設定ファイルのパスが不明です")?;
+
+    let folder = path.parent().ok_or("親ディレクトリが取得できません")?;
+
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(folder)
+            .spawn()
+            .map_err(|e| format!("フォルダを開けません: {}", e))?;
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .arg(folder)
+            .spawn()
+            .map_err(|e| format!("フォルダを開けません: {}", e))?;
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(folder)
+            .spawn()
+            .map_err(|e| format!("フォルダを開けません: {}", e))?;
+    }
+
+    Ok(())
+}
+
 /// ディレクトリが存在するか確認する
 #[tauri::command]
 fn check_dir_exists(path: String) -> bool {
@@ -218,6 +255,7 @@ pub fn run() {
             join_session,
             publish,
             check_dir_exists,
+            open_config_folder,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

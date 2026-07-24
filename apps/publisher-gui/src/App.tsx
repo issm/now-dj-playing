@@ -155,6 +155,12 @@ function App() {
     } catch { }
   };
 
+  const handleOpenFolder = async () => {
+    try {
+      await invoke("open_config_folder");
+    } catch { }
+  };
+
   // web モードで join 済みの場合、入力を無効化
   const webInputDisabled = mode === "web" && joined;
 
@@ -196,6 +202,12 @@ function App() {
                 onClick={() => { handleSaveConfig(); setMenuOpen(false); }}
               >
                 Config 保存
+              </button>
+              <button
+                className="w-full text-left px-3 py-2 text-xs hover:bg-gray-700"
+                onClick={() => { handleOpenFolder(); setMenuOpen(false); }}
+              >
+                フォルダを開く
               </button>
             </div>
           )}
@@ -287,12 +299,12 @@ function App() {
       {/* ドロップ領域 */}
       <div
         className={`relative flex-1 flex flex-col items-center justify-center border-2 border-dashed rounded-lg transition-colors overflow-hidden ${isDragOver
-            ? "border-blue-400 bg-blue-900/30"
-            : publishStatus === "success"
-              ? "border-green-500 bg-gray-800/50"
-              : publishStatus === "error"
-                ? "border-red-500 bg-gray-800/50"
-                : "border-gray-600 bg-gray-800/50"
+          ? "border-blue-400 bg-blue-900/30"
+          : publishStatus === "success"
+            ? "border-green-500 bg-gray-800/50"
+            : publishStatus === "error"
+              ? "border-red-500 bg-gray-800/50"
+              : "border-gray-600 bg-gray-800/50"
           }`}
       >
         {/* アートワーク背景 */}
