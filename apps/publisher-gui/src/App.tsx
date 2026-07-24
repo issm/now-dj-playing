@@ -257,8 +257,9 @@ function App() {
               </button>
             ) : (
               <button
-                className="bg-green-700 hover:bg-green-600 px-2 py-1 rounded text-xs"
+                className={`px-2 py-1 rounded text-xs ${code.length === 6 ? "bg-green-700 hover:bg-green-600" : "bg-gray-600 opacity-50 cursor-not-allowed"}`}
                 onClick={handleJoin}
+                disabled={code.length !== 6}
               >
                 Join
               </button>
