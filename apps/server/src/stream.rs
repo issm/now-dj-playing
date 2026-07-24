@@ -106,6 +106,9 @@ fn event_to_sse(event: SessionEvent) -> Event {
         SessionEvent::PublisherJoined { .. } => Event::default()
             .event("publisher_joined")
             .data(serde_json::to_string(&event).unwrap_or_default()),
+        SessionEvent::PublisherLeft { .. } => Event::default()
+            .event("publisher_left")
+            .data(serde_json::to_string(&event).unwrap_or_default()),
     }
 }
 

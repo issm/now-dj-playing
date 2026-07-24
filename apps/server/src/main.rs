@@ -1,3 +1,4 @@
+mod leave;
 mod publish;
 mod session;
 mod stream;
@@ -47,6 +48,7 @@ async fn main() {
         .route("/sessions/create", post(session::create_session))
         .route("/sessions/join", post(session::join_session))
         .route("/sessions/{session_id}/publish", post(publish::publish))
+        .route("/sessions/{session_id}/leave", post(leave::leave))
         .route("/sessions/{session_id}/stream", get(stream::stream))
         .with_state(store);
 

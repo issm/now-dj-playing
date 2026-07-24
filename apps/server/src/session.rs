@@ -19,6 +19,11 @@ pub enum SessionEvent {
         publisher_id: String,
         dj_name: String,
     },
+    #[serde(rename = "publisher_left")]
+    PublisherLeft {
+        publisher_id: String,
+        dj_name: String,
+    },
 }
 
 /// 楽曲情報
@@ -171,6 +176,35 @@ impl SessionStore {
         }
     }
 
+    /// publisher をセッションから離脱させ、SSE で publisher_left イベントを配信する
+    pub fn leave(&self, session_id: &str, publisher_id: &str) -> Result<Publisher, LeaveError> {
+        let removed_publisher = {
+            let mut sessions = self.sessions.lock().unwrap();
+            let session = sessions
+                .get_mut(session_id)
+                .ok_or(LeaveError::SessionNotFound)?;
+
+            let pos = session
+                .publishers
+                .iter()
+                .position(|p| p.id == publisher_id)
+                .ok_or(LeaveError::PublisherNotFound)?;
+
+            session.publishers.remove(pos)
+        };
+
+        // publisher_left イベントを配信
+        let channels = self.channels.lock().unwrap();
+        if let Some(ch) = channels.get(session_id) {
+            let _ = ch.tx.send(SessionEvent::PublisherLeft {
+                publisher_id: removed_publisher.id.clone(),
+                dj_name: removed_publisher.dj_name.clone(),
+            });
+        }
+
+        Ok(removed_publisher)
+    }
+
     /// SSE 用の receiver を取得する
     pub fn subscribe(&self, session_id: &str) -> Option<broadcast::Receiver<SessionEvent>> {
         let channels = self.channels.lock().unwrap();
@@ -188,6 +222,13 @@ impl SessionStore {
 #[derive(Debug)]
 pub enum JoinError {
     InvalidCode,
+}
+
+/// leave 時のエラー
+#[derive(Debug)]
+pub enum LeaveError {
+    SessionNotFound,
+    PublisherNotFound,
 }
 
 /// 0埋め6桁のセッションコードを生成する
