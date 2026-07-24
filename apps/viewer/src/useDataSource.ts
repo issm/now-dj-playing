@@ -9,6 +9,12 @@ export interface DjJoined {
   djName: string;
 }
 
+/** 離脱した DJ の情報 */
+export interface DjLeft {
+  id: string;
+  djName: string;
+}
+
 /** データソースのコールバック */
 export interface DataSourceCallbacks {
   onTrack: (track: TrackPayload) => void;
@@ -17,6 +23,8 @@ export interface DataSourceCallbacks {
   onSessionCreated?: (sessionCode: string) => void;
   /** web モード: publisher が join したときに呼ばれる */
   onDjJoined?: (dj: DjJoined) => void;
+  /** web モード: publisher が leave したときに呼ばれる */
+  onDjLeft?: (dj: DjLeft) => void;
 }
 
 /**
@@ -142,6 +150,21 @@ function startWebDataSource(
             `[web] publisher 参加: ${data.dj_name} (${data.publisher_id})`,
           );
           callbacksRef.current.onDjJoined?.({
+            id: data.publisher_id,
+            djName: data.dj_name,
+          });
+        } catch {
+          // 無視
+        }
+      });
+
+      eventSource.addEventListener("publisher_left", (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          console.log(
+            `[web] publisher 離脱: ${data.dj_name} (${data.publisher_id})`,
+          );
+          callbacksRef.current.onDjLeft?.({
             id: data.publisher_id,
             djName: data.dj_name,
           });
