@@ -29,7 +29,9 @@ async fn health() -> Json<HealthResponse> {
 #[tokio::main]
 async fn main() {
     // tracing の初期化（RUST_LOG 環境変数で制御可能、デフォルト info + tower_http は debug）
+    // JSON 形式で構造化ログを出力
     tracing_subscriber::fmt()
+        .json()
         .with_env_filter(
             EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| EnvFilter::new("info,tower_http=debug")),
