@@ -3,7 +3,7 @@ mod publish;
 mod session;
 mod stream;
 
-use axum::{routing::get, routing::post, Json, Router};
+use axum::{routing::delete, routing::get, routing::post, Json, Router};
 use serde::Serialize;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -49,6 +49,7 @@ async fn main() {
     let api = Router::new()
         .route("/sessions/create", post(session::create_session))
         .route("/sessions/join", post(session::join_session))
+        .route("/sessions/{session_id}", delete(session::destroy_session))
         .route("/sessions/{session_id}/publish", post(publish::publish))
         .route("/sessions/{session_id}/leave", post(leave::leave))
         .route("/sessions/{session_id}/stream", get(stream::stream))
