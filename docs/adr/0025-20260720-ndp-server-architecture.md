@@ -2,7 +2,7 @@
 
 ## ステータス
 
-Accepted
+Accepted（デプロイ完了: 2026-07-25）
 
 ## コンテキスト
 
@@ -178,18 +178,32 @@ data: {}
 
 ```
 [Value Domain DNS]
-  A relay.example.com → Lightsail Static IP
+  A ndp.iss.ms → Lightsail Static IP (54.250.170.218)
 
 [Lightsail instance ($5/月, Debian 13)]
-  Caddy (:443, auto TLS) → ndp-server (:8080)
+  Caddy (:443, :80 → 308 redirect)
+    └─ reverse_proxy → ndp-server (:8080)
+        SSE パス: flush_interval -1 でバッファリング無効化
 ```
+
+- OS: Debian 13 (Trixie)
+- TLS: Caddy + Let's Encrypt (自動取得・自動更新)
+- プロセス管理: systemd (`ndp-server.service`)
+- 実行ユーザ: `ndp` (専用システムユーザ)
+- バイナリ配置先: `/opt/ndp-server/ndp-server`
+- デプロイスクリプト: `deploy/ndp-server/`
 
 ### CORS
 
 開発時は全オリジン許可 (`Access-Control-Allow-Origin: *`)。本番では Caddy が前段にいるため同一オリジンとなり CORS の影響はない。
 
-- インフラ管理は AWS CLI ラッパースクリプトで行う
-- デプロイはクロスコンパイル (`cargo-zigbuild` + musl ターゲット) + scp + systemd
+### ビルド・デプロイフロー
+
+1. ローカルで `cargo-zigbuild` + `x86_64-unknown-linux-musl` ターゲットでクロスコンパイル
+2. scp でバイナリをリモートに転送
+3. systemd でサービス再起動
+
+スクリプトは `deploy/ndp-server/` に配置。詳細は [deploy/ndp-server/README.md](../../deploy/ndp-server/README.md) を参照。
 
 ### ストレージ設計方針
 
@@ -198,6 +212,7 @@ data: {}
 ## 影響
 
 - `apps/server/` に新しい Rust プロジェクトが追加される
-- publisher CLI に WebSocket/HTTP 送信機能を追加する必要がある（別 issue）
-- Phase 2 用の Web 版 viewer を別途実装する必要がある（別 issue）
+- publisher CLI に HTTP 送信機能を追加する必要がある（実装済み: ADR-0028）
+- Phase 2 用の Web 版 viewer を別途実装する必要がある（実装済み: ADR-0026）
+- `deploy/ndp-server/` にデプロイ関連スクリプト・設定を配置
 - Lightsail インスタンスの運用コスト ($5/月 + ドメイン代) が発生する

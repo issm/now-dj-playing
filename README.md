@@ -51,6 +51,8 @@ now-dj-playing/
 │   ├─ publisher/       楽曲タグ抽出 CLI ツール (Rust)
 │   ├─ publisher-gui/   Publisher GUI アプリ (Tauri 2)
 │   └─ server/          中継サーバ (Rust, axum)
+├─ deploy/
+│   └─ ndp-server/      デプロイスクリプト・設定 (Lightsail + Caddy + systemd)
 ├─ packages/
 │   ├─ watch-core/      ファイル監視コアロジック (pure Rust)
 │   └─ shared/schemas/  JSON スキーマ定義
@@ -242,7 +244,12 @@ cargo run
 
 #### デプロイ
 
-本番環境: Lightsail + Caddy (TLS 自動)。`cargo-zigbuild` + musl ターゲットで静的リンクバイナリを生成し、scp で配置。
+本番環境: AWS Lightsail (Debian 13, $5/月) + Caddy (TLS 自動, Let's Encrypt)。
+
+- エンドポイント: `https://ndp.iss.ms`
+- ビルド: `cargo-zigbuild` + `x86_64-unknown-linux-musl` で静的リンクバイナリを生成
+- 配置: scp + systemd で管理
+- 詳細: [deploy/ndp-server/README.md](deploy/ndp-server/README.md)
 
 ### Watch Core
 
