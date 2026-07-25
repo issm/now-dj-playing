@@ -16,7 +16,7 @@
   // 背景画像設定
   "background_image": {
     // 背景画像を格納するディレクトリ（~ 展開・相対パス解決あり）
-    "base_dir": "~/apps/ndp/bg",
+    "base_dir": "~/apps/ndp/viewer/bg",
     // base_dir からの相対パス（null で「なし」）
     "path": "background.png"
   }
