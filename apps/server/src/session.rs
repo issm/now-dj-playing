@@ -216,6 +216,27 @@ impl SessionStore {
         let sessions = self.sessions.lock().unwrap();
         sessions.get(session_id).and_then(|s| s.last_track.clone())
     }
+
+    /// セッションを破棄する（viewer_token による認証付き）
+    pub fn destroy(&self, session_id: &str, viewer_token: &str) -> Result<(), DestroyError> {
+        let mut sessions = self.sessions.lock().unwrap();
+        let session = sessions
+            .get(session_id)
+            .ok_or(DestroyError::SessionNotFound)?;
+
+        if session.viewer_token != viewer_token {
+            return Err(DestroyError::Unauthorized);
+        }
+
+        sessions.remove(session_id);
+        drop(sessions);
+
+        // broadcast チャネルも削除（receiver 側は SendError になって自然に切断される）
+        let mut channels = self.channels.lock().unwrap();
+        channels.remove(session_id);
+
+        Ok(())
+    }
 }
 
 /// join 時のエラー
@@ -229,6 +250,13 @@ pub enum JoinError {
 pub enum LeaveError {
     SessionNotFound,
     PublisherNotFound,
+}
+
+/// destroy 時のエラー
+#[derive(Debug)]
+pub enum DestroyError {
+    SessionNotFound,
+    Unauthorized,
 }
 
 /// 0埋め6桁のセッションコードを生成する
@@ -303,6 +331,45 @@ pub async fn join_session(
             StatusCode::NOT_FOUND,
             Json(ErrorResponse {
                 error: "無効なセッションコードです".to_string(),
+            }),
+        )),
+    }
+}
+
+/// DELETE /api/sessions/{session_id}
+///
+/// Authorization: Bearer {viewer_token}
+pub async fn destroy_session(
+    State(store): State<Arc<SessionStore>>,
+    axum::extract::Path(session_id): axum::extract::Path<String>,
+    headers: axum::http::HeaderMap,
+) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
+    // Authorization ヘッダから Bearer トークンを抽出
+    let viewer_token = headers
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
+        .ok_or_else(|| {
+            (
+                StatusCode::UNAUTHORIZED,
+                Json(ErrorResponse {
+                    error: "Authorization ヘッダが必要です".to_string(),
+                }),
+            )
+        })?;
+
+    match store.destroy(&session_id, viewer_token) {
+        Ok(()) => Ok(StatusCode::NO_CONTENT),
+        Err(DestroyError::SessionNotFound) => Err((
+            StatusCode::NOT_FOUND,
+            Json(ErrorResponse {
+                error: "セッションが見つかりません".to_string(),
+            }),
+        )),
+        Err(DestroyError::Unauthorized) => Err((
+            StatusCode::FORBIDDEN,
+            Json(ErrorResponse {
+                error: "このセッションを破棄する権限がありません".to_string(),
             }),
         )),
     }
