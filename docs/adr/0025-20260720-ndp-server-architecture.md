@@ -28,7 +28,7 @@ Phase 2 (クラウド中継サーバ) を実現するため、publisher と view
 
 | 選択肢 | メリット | デメリット |
 |---|---|---|
-| **Lightsail (採用)** | 月 $3.50。SSE 制限なし。シンプル | IAM ロールなし（アクセスキーで対応） |
+| **Lightsail (採用)** | 月 $5。SSE 制限なし。シンプル | IAM ロールなし（アクセスキーで対応） |
 | Lambda + API Gateway | スケールゼロ。使わない時コスト 0 | SSE の長時間接続に不向き（15 分タイムアウト） |
 | ECS Fargate | CDK で管理可能。IAM ロール使用可 | 最小構成でも月 $10〜。オーバースペック |
 | Fly.io / Railway | 無料枠あり | AWS エコシステムとの統合が弱い |
@@ -180,7 +180,7 @@ data: {}
 [Value Domain DNS]
   A relay.example.com → Lightsail Static IP
 
-[Lightsail instance ($3.50/月)]
+[Lightsail instance ($5/月, Debian 13)]
   Caddy (:443, auto TLS) → ndp-server (:8080)
 ```
 
@@ -200,4 +200,4 @@ data: {}
 - `apps/server/` に新しい Rust プロジェクトが追加される
 - publisher CLI に WebSocket/HTTP 送信機能を追加する必要がある（別 issue）
 - Phase 2 用の Web 版 viewer を別途実装する必要がある（別 issue）
-- Lightsail インスタンスの運用コスト ($3.50/月 + ドメイン代) が発生する
+- Lightsail インスタンスの運用コスト ($5/月 + ドメイン代) が発生する

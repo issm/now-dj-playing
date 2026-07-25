@@ -60,7 +60,15 @@ impl AppConfig {
     }
 
     /// web.endpoint_url を取得
+    ///
+    /// 環境変数 NDP_PUBLISH_ENDPOINT_URL が設定されている場合はそちらを優先する。
+    /// これにより publisher-gui 等で UI から渡された値を反映できる。
     pub fn web_endpoint_url(&self) -> Option<String> {
+        if let Ok(url) = std::env::var("NDP_PUBLISH_ENDPOINT_URL") {
+            if !url.is_empty() {
+                return Some(url);
+            }
+        }
         self.file.web.as_ref().and_then(|w| w.endpoint_url.clone())
     }
 
