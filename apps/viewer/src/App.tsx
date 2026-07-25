@@ -329,7 +329,6 @@ function App() {
                 <DjRosterHeader
                     roster={roster}
                     currentDjId={track?.dirName ?? null}
-                    fallbackName={track ? track.djName ?? track.dirName : null}
                     djLogoSrc={resolveImageSrc(track?.djLogoPath ?? null, track?.updatedAt ?? "")}
                 />
 
@@ -460,12 +459,10 @@ function TrackBody({ track, showComments, showTags }: { track: TrackPayload; sho
 function DjRosterHeader({
     roster,
     currentDjId,
-    fallbackName,
     djLogoSrc,
 }: {
     roster: Map<string, string>;
     currentDjId: string | null;
-    fallbackName: string | null;
     djLogoSrc: string | null;
 }) {
     const entries = Array.from(roster.entries());
@@ -473,7 +470,7 @@ function DjRosterHeader({
     // n <= 1: 従来通りの単一表示（ハイライトなし）
     // ロスターが空の場合も高さを確保するため、常にヘッダ自体は表示する
     if (entries.length <= 1) {
-        const displayName = entries[0]?.[1] ?? fallbackName;
+        const displayName = entries[0]?.[1] ?? null;
 
         return (
             <header className="flex h-[100px] shrink-0 items-center justify-center gap-3 px-8">
