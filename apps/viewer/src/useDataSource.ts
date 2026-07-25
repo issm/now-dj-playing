@@ -15,12 +15,18 @@ export interface DjLeft {
   djName: string;
 }
 
+/** web セッション情報（接続中に保持） */
+export interface WebSession {
+  sessionId: string;
+  code: string;
+  viewerToken: string;
+  serverUrl: string;
+}
+
 /** データソースのコールバック */
 export interface DataSourceCallbacks {
   onTrack: (track: TrackPayload) => void;
   onError: (message: string) => void;
-  /** web モード: セッション作成完了時に呼ばれる */
-  onSessionCreated?: (sessionCode: string) => void;
   /** web モード: publisher が join したときに呼ばれる */
   onDjJoined?: (dj: DjJoined) => void;
   /** web モード: publisher が leave したときに呼ばれる */
@@ -28,12 +34,11 @@ export interface DataSourceCallbacks {
 }
 
 /**
- * モードに応じたデータソースを開始するカスタムフック
+ * local モード専用のデータソースフック
  *
- * - local: Tauri IPC で track-changed イベントを listen
- * - web: ndp-server に SSE 接続して track_changed を受信
+ * web モードは connectWebSession / disconnectWebSession を使う
  */
-export function useDataSource(
+export function useLocalDataSource(
   config: AppConfig | null,
   callbacks: DataSourceCallbacks,
 ) {
@@ -42,12 +47,9 @@ export function useDataSource(
 
   useEffect(() => {
     if (!config) return;
+    if (config.mode !== "local") return;
 
-    if (config.mode === "local") {
-      return startLocalDataSource(config, callbacksRef);
-    } else if (config.mode === "web") {
-      return startWebDataSource(config, callbacksRef);
-    }
+    return startLocalDataSource(config, callbacksRef);
   }, [config]);
 }
 
@@ -82,113 +84,140 @@ function startLocalDataSource(
   };
 }
 
-/** web モード: ndp-server に SSE 接続 */
-function startWebDataSource(
+/**
+ * web モード: セッションを作成して SSE 接続を開始する
+ *
+ * 返り値の cleanup を呼ぶと SSE を切断する（サーバー側セッションは維持）
+ */
+export async function connectWebSession(
   config: AppConfig,
-  callbacksRef: React.RefObject<DataSourceCallbacks>,
-): () => void {
+  callbacks: DataSourceCallbacks,
+  onSessionCreated: (session: WebSession) => void,
+): Promise<() => void> {
   const serverUrl = config.web.serverUrl;
   let eventSource: EventSource | null = null;
   let cancelled = false;
 
-  (async () => {
-    try {
-      // セッション作成
-      const createResp = await fetch(`${serverUrl}/api/sessions/create`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ event_name: config.eventName }),
-      });
-
-      if (!createResp.ok) {
-        throw new Error(`セッション作成に失敗: HTTP ${createResp.status}`);
-      }
-
-      const session = await createResp.json();
-      if (cancelled) return;
-
-      console.log(
-        `[web] セッション作成: id=${session.session_id}, code=${session.code}`,
-      );
-
-      // セッションコードを通知
-      callbacksRef.current.onSessionCreated?.(session.code);
-
-      // SSE 接続
-      // EventSource は Authorization ヘッダを送れないため、クエリパラメータでトークンを渡す
-      const streamUrl = `${serverUrl}/api/sessions/${session.session_id}/stream?token=${session.viewer_token}`;
-      eventSource = new EventSource(streamUrl);
-
-      eventSource.addEventListener("track_changed", (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          // ndp-server の TrackData → TrackPayload に変換
-          const track: TrackPayload = {
-            dirName: data.publisher_id,
-            djName: data.dj_name,
-            djLogoPath: null,
-            title: data.title,
-            artist: data.artist,
-            album: data.album ?? null,
-            comment: data.comment ?? null,
-            // ndp-server から Base64 Data URI (data:image/...) がそのまま送られてくる
-            artworkPath: data.artwork ?? null,
-            updatedAt: data.updated_at,
-          };
-          callbacksRef.current.onTrack(track);
-          // モニタウィンドウに転送
-          emitTo("monitor", "monitor-track", track);
-        } catch (e) {
-          console.error("[web] track_changed パースエラー:", e);
-        }
-      });
-
-      eventSource.addEventListener("publisher_joined", (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          console.log(
-            `[web] publisher 参加: ${data.dj_name} (${data.publisher_id})`,
-          );
-          callbacksRef.current.onDjJoined?.({
-            id: data.publisher_id,
-            djName: data.dj_name,
-          });
-        } catch {
-          // 無視
-        }
-      });
-
-      eventSource.addEventListener("publisher_left", (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          console.log(
-            `[web] publisher 離脱: ${data.dj_name} (${data.publisher_id})`,
-          );
-          callbacksRef.current.onDjLeft?.({
-            id: data.publisher_id,
-            djName: data.dj_name,
-          });
-        } catch {
-          // 無視
-        }
-      });
-
-      eventSource.onerror = () => {
-        if (!cancelled) {
-          callbacksRef.current.onError("サーバとの接続が切断されました");
-        }
-      };
-    } catch (err) {
-      if (!cancelled) {
-        callbacksRef.current.onError(String(err));
-      }
-    }
-  })();
-
-  return () => {
+  const cleanup = () => {
     cancelled = true;
     if (eventSource) {
       eventSource.close();
+      eventSource = null;
     }
   };
+
+  try {
+    // セッション作成
+    const createResp = await fetch(`${serverUrl}/api/sessions/create`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ event_name: config.eventName }),
+    });
+
+    if (!createResp.ok) {
+      throw new Error(`セッション作成に失敗: HTTP ${createResp.status}`);
+    }
+
+    const session = await createResp.json();
+    if (cancelled) return cleanup;
+
+    console.log(
+      `[web] セッション作成: id=${session.session_id}, code=${session.code}`,
+    );
+
+    const webSession: WebSession = {
+      sessionId: session.session_id,
+      code: session.code,
+      viewerToken: session.viewer_token,
+      serverUrl,
+    };
+
+    onSessionCreated(webSession);
+
+    // SSE 接続
+    const streamUrl = `${serverUrl}/api/sessions/${session.session_id}/stream?token=${session.viewer_token}`;
+    eventSource = new EventSource(streamUrl);
+
+    eventSource.addEventListener("track_changed", (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        const track: TrackPayload = {
+          dirName: data.publisher_id,
+          djName: data.dj_name,
+          djLogoPath: null,
+          title: data.title,
+          artist: data.artist,
+          album: data.album ?? null,
+          comment: data.comment ?? null,
+          artworkPath: data.artwork ?? null,
+          updatedAt: data.updated_at,
+        };
+        callbacks.onTrack(track);
+        emitTo("monitor", "monitor-track", track);
+      } catch (e) {
+        console.error("[web] track_changed パースエラー:", e);
+      }
+    });
+
+    eventSource.addEventListener("publisher_joined", (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        console.log(
+          `[web] publisher 参加: ${data.dj_name} (${data.publisher_id})`,
+        );
+        callbacks.onDjJoined?.({
+          id: data.publisher_id,
+          djName: data.dj_name,
+        });
+      } catch {
+        // 無視
+      }
+    });
+
+    eventSource.addEventListener("publisher_left", (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        console.log(
+          `[web] publisher 離脱: ${data.dj_name} (${data.publisher_id})`,
+        );
+        callbacks.onDjLeft?.({
+          id: data.publisher_id,
+          djName: data.dj_name,
+        });
+      } catch {
+        // 無視
+      }
+    });
+
+    eventSource.onerror = () => {
+      if (!cancelled) {
+        callbacks.onError("サーバとの接続が切断されました");
+      }
+    };
+  } catch (err) {
+    if (!cancelled) {
+      callbacks.onError(String(err));
+    }
+  }
+
+  return cleanup;
+}
+
+/**
+ * web モード: セッションを破棄する（サーバーに DELETE を送信）
+ *
+ * ベストエフォート: ネットワークエラー時は無視する
+ */
+export async function destroyWebSession(session: WebSession): Promise<void> {
+  try {
+    await fetch(`${session.serverUrl}/api/sessions/${session.sessionId}`, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${session.viewerToken}`,
+      },
+    });
+    console.log(`[web] セッション破棄: id=${session.sessionId}`);
+  } catch (err) {
+    console.warn("[web] セッション破棄に失敗（無視）:", err);
+  }
 }
