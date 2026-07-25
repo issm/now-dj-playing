@@ -116,7 +116,7 @@ impl SessionStore {
             .find(|s| s.code == code)
             .ok_or(JoinError::InvalidCode)?;
 
-        let publisher_id = format!("pub_{:03}", session.publishers.len() + 1);
+        let publisher_id = format!("pub_{}", Uuid::new_v4().simple());
         let token = format!("pt_{}", Uuid::new_v4().simple());
 
         let publisher = Publisher {
