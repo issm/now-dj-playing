@@ -22,11 +22,51 @@ pub struct BackgroundImageConfig {
     pub path: Option<String>,
 }
 
+/// データソースモード
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum Mode {
+    Local,
+    Web,
+}
+
+/// local モード固有の設定（設定ファイル側）
+#[derive(Debug, Clone, Deserialize)]
+pub struct LocalConfigFile {
+    pub watch_dir: Option<String>,
+    pub dj_id: Option<String>,
+}
+
+/// web モード固有の設定（設定ファイル側）
+#[derive(Debug, Clone, Deserialize)]
+pub struct WebConfigFile {
+    pub server_url: Option<String>,
+}
+
+/// local モード固有の設定（解決済み・フロントエンドに送る形式）
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalConfig {
+    pub watch_dir: String,
+    pub dj_id: String,
+}
+
+/// web モード固有の設定（解決済み・フロントエンドに送る形式）
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WebConfig {
+    pub server_url: String,
+}
+
 /// 設定ファイルのスキーマ（JSONC でパースされる）
 #[derive(Debug, Clone, Deserialize)]
 pub struct AppConfigFile {
-    pub watch_dir: Option<String>,
-    pub dj_id: Option<String>,
+    /// データソースモード（省略時は local）
+    pub mode: Option<Mode>,
+    /// local モード固有の設定
+    pub local: Option<LocalConfigFile>,
+    /// web モード固有の設定
+    pub web: Option<WebConfigFile>,
     pub enable_comments: Option<bool>,
     pub show_tags: Option<bool>,
     pub event_name: Option<String>,
@@ -39,8 +79,12 @@ pub struct AppConfigFile {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppConfig {
-    pub watch_dir: String,
-    pub dj_id: String,
+    /// データソースモード
+    pub mode: Mode,
+    /// local モード固有の設定
+    pub local: LocalConfig,
+    /// web モード固有の設定
+    pub web: WebConfig,
     pub enable_comments: bool,
     pub show_tags: bool,
     /// イベント名（省略時は None）
@@ -118,11 +162,39 @@ fn merge_config(file: AppConfigFile, config_path: &PathBuf) -> AppConfig {
     // 設定ファイルの親ディレクトリ（相対パス解決の基準）
     let config_dir = config_path.parent().unwrap_or(Path::new("."));
 
-    let watch_dir_raw = file.watch_dir.unwrap_or_else(|| {
-        let home = dirs_home().unwrap_or_else(|| "/tmp".into());
-        home.join("ndp").display().to_string()
-    });
-    let watch_dir = resolve_path(&watch_dir_raw, config_dir);
+    let mode = file.mode.unwrap_or(Mode::Local);
+
+    // local 設定の解決
+    let local_config = {
+        let watch_dir_raw = file
+            .local
+            .as_ref()
+            .and_then(|l| l.watch_dir.clone())
+            .unwrap_or_else(|| {
+                let home = dirs_home().unwrap_or_else(|| "/tmp".into());
+                home.join("ndp").display().to_string()
+            });
+        let watch_dir = resolve_path(&watch_dir_raw, config_dir);
+
+        let dj_id = file
+            .local
+            .as_ref()
+            .and_then(|l| l.dj_id.clone())
+            .unwrap_or_else(|| "dj-000".to_string());
+
+        LocalConfig { watch_dir, dj_id }
+    };
+
+    // web 設定の解決
+    let web_config = {
+        let server_url = file
+            .web
+            .as_ref()
+            .and_then(|w| w.server_url.clone())
+            .unwrap_or_else(|| "http://localhost:8080".to_string());
+
+        WebConfig { server_url }
+    };
 
     // 背景画像設定の解決
     let background_image = file.background_image.map(|bg| {
@@ -134,8 +206,9 @@ fn merge_config(file: AppConfigFile, config_path: &PathBuf) -> AppConfig {
     });
 
     AppConfig {
-        watch_dir,
-        dj_id: file.dj_id.unwrap_or_else(|| "dj-000".to_string()),
+        mode,
+        local: local_config,
+        web: web_config,
         enable_comments: file.enable_comments.unwrap_or(false),
         show_tags: file.show_tags.unwrap_or(true),
         event_name: file.event_name,

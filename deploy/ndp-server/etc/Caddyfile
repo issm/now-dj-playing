@@ -1,0 +1,17 @@
+# ndp-server 用 Caddy 設定
+# Let's Encrypt で自動 TLS 取得・更新
+#
+# {$DOMAIN} を sed 等で実際のドメインに置き換えてから配置すること
+# 例: sed 's/{$DOMAIN}/ndp.iss.ms/' etc/Caddyfile
+
+{$DOMAIN} {
+    reverse_proxy 127.0.0.1:8080
+
+    # SSE 用: バッファリング無効化
+    @sse path /api/sessions/*/stream
+    handle @sse {
+        reverse_proxy 127.0.0.1:8080 {
+            flush_interval -1
+        }
+    }
+}

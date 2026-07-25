@@ -1,7 +1,7 @@
 mod config;
 
 use config::AppConfig;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::thread;
@@ -11,6 +11,17 @@ use watch_core::{DirWatcher, DjProfile, WatchEvent};
 
 /// アプリケーション設定のグローバルインスタンス
 static APP_CONFIG: Mutex<Option<Result<AppConfig, String>>> = Mutex::new(None);
+
+/// web モードのセッション情報（終了時 destroy 用）
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WebSessionInfo {
+    session_id: String,
+    viewer_token: String,
+    server_url: String,
+}
+
+static WEB_SESSION: Mutex<Option<WebSessionInfo>> = Mutex::new(None);
 
 fn get_or_init_config() -> Result<AppConfig, String> {
     let mut guard = APP_CONFIG.lock().unwrap();
@@ -175,8 +186,8 @@ fn list_background_images() -> Result<Vec<BackgroundImageEntry>, String> {
 #[tauri::command]
 fn start_watch(app: AppHandle) -> Result<String, String> {
     let config = get_or_init_config()?;
-    let base_dir = &config.watch_dir;
-    let dj_id = &config.dj_id;
+    let base_dir = &config.local.watch_dir;
+    let dj_id = &config.local.dj_id;
 
     let path = PathBuf::from(base_dir);
 
@@ -215,6 +226,23 @@ fn open_monitor(app: AppHandle) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
 
     Ok(())
+}
+
+/// フロントエンドから web セッション情報を受け取るコマンド（終了時 destroy 用）
+#[tauri::command]
+fn set_web_session(session_id: String, viewer_token: String, server_url: String) {
+    let info = WebSessionInfo {
+        session_id,
+        viewer_token,
+        server_url,
+    };
+    *WEB_SESSION.lock().unwrap() = Some(info);
+}
+
+/// web セッション情報をクリアするコマンド
+#[tauri::command]
+fn clear_web_session() {
+    *WEB_SESSION.lock().unwrap() = None;
 }
 
 /// watcher のメインループ
@@ -310,7 +338,7 @@ fn emit_track_changed(app: &AppHandle, state: watch_core::DjState) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -331,10 +359,11 @@ pub fn run() {
             log::info!("App version: {}", version_info.full);
 
             // メインウィンドウが閉じられたらアプリ全体を終了する
+            let app_handle = app.handle().clone();
             let main_window = app.get_webview_window("main").unwrap();
             main_window.on_window_event(move |event| {
                 if let tauri::WindowEvent::Destroyed = event {
-                    std::process::exit(0);
+                    app_handle.exit(0);
                 }
             });
 
@@ -347,7 +376,42 @@ pub fn run() {
             open_monitor,
             get_version_info,
             list_background_images,
+            set_web_session,
+            clear_web_session,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    app.run(|_app_handle, event| {
+        if let tauri::RunEvent::Exit = event {
+            destroy_session_on_exit();
+        }
+    });
+}
+
+/// アプリ終了時にサーバー側のセッションを破棄する（ベストエフォート）
+fn destroy_session_on_exit() {
+    let session = WEB_SESSION.lock().unwrap().take();
+    let session = match session {
+        Some(s) => s,
+        None => return,
+    };
+
+    log::info!(
+        "終了時セッション破棄を試行: session_id={}",
+        session.session_id
+    );
+
+    // タイムアウト 3 秒でブロッキング HTTP DELETE を実行
+    let url = format!("{}/api/sessions/{}", session.server_url, session.session_id);
+
+    let result = ureq::delete(&url)
+        .set("Authorization", &format!("Bearer {}", session.viewer_token))
+        .timeout(std::time::Duration::from_secs(3))
+        .call();
+
+    match result {
+        Ok(_) => log::info!("セッション破棄完了: {}", session.session_id),
+        Err(e) => log::warn!("セッション破棄に失敗（無視）: {}", e),
+    }
 }

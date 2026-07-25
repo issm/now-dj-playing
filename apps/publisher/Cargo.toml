@@ -1,14 +1,29 @@
 [package]
 name = "ndp-publish"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
-description = "楽曲ファイルからタグ・アートワークを抽出し、共有ディレクトリに出力する CLI ツール"
+description = "楽曲ファイルからタグ・アートワークを抽出し、共有ディレクトリまたは ndp-server に送信する CLI ツール"
+
+[lib]
+name = "ndp_publish"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ndp-publish"
+path = "src/main.rs"
 
 [dependencies]
 anyhow = "1"
+base64 = "0.22"
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4", features = ["derive"] }
+dirs = "5"
 id3 = "1.13"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+imagesize = "0.13"
 mp4ameta = "0.11"
+reqwest = { version = "0.12", features = ["blocking", "json"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+serde_json_lenient = "0.2"
+shellexpand = "3"

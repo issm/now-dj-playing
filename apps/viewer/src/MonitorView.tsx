@@ -1,5 +1,5 @@
-import { convertFileSrc } from "@tauri-apps/api/core";
 import type { TrackPayload } from "./types";
+import { resolveImageSrc } from "./artwork";
 
 /**
  * モニタウィンドウ用のコンパクト表示コンポーネント
@@ -14,10 +14,7 @@ function MonitorView({ track }: { track: TrackPayload | null }) {
         );
     }
 
-    const cacheBuster = `?t=${encodeURIComponent(track.updatedAt)}`;
-    const artworkSrc = track.artworkPath
-        ? convertFileSrc(track.artworkPath) + cacheBuster
-        : null;
+    const artworkSrc = resolveImageSrc(track.artworkPath, track.updatedAt);
 
     return (
         <div className="flex h-screen flex-col bg-black p-3 text-white">
