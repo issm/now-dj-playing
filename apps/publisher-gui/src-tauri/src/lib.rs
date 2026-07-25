@@ -44,11 +44,43 @@ struct AppState {
     config_path: Mutex<Option<PathBuf>>,
 }
 
-/// アプリ実行ファイルの隣接ディレクトリを取得する
+/// アプリ隣接ディレクトリの候補を返す
+///
+/// macOS の .app バンドルの場合、バイナリは `Foo.app/Contents/MacOS/binary` にあるため、
+/// `.app` の親ディレクトリも探索対象に含める。
+fn app_adjacent_dirs() -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+
+    if let Ok(exe_path) = std::env::current_exe() {
+        // バイナリ自身のディレクトリ（非バンドル時やデバッグビルド時）
+        if let Some(exe_dir) = exe_path.parent() {
+            dirs.push(exe_dir.to_path_buf());
+
+            // macOS .app バンドル検出: .../Foo.app/Contents/MacOS/binary
+            // → Contents/MacOS の 2 階層上が .app ディレクトリ
+            if exe_dir.ends_with("Contents/MacOS") {
+                if let Some(app_dir) = exe_dir.parent().and_then(|p| p.parent()) {
+                    // .app バンドルの親ディレクトリを追加
+                    if let Some(app_parent) = app_dir.parent() {
+                        dirs.push(app_parent.to_path_buf());
+                    }
+                }
+            }
+        }
+    }
+
+    dirs
+}
+
+/// アプリ隣接の設定ファイルパスを探索する
 fn app_adjacent_config_path() -> Option<PathBuf> {
-    std::env::current_exe()
-        .ok()
-        .and_then(|exe| exe.parent().map(|dir| dir.join("ndp-publish.config.json")))
+    for dir in app_adjacent_dirs() {
+        let path = dir.join("ndp-publish.config.json");
+        if path.is_file() {
+            return Some(path);
+        }
+    }
+    None
 }
 
 /// 設定ファイルを読み込む
