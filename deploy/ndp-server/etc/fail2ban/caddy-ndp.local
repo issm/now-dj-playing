@@ -1,0 +1,24 @@
+# fail2ban jail: ndp-server 向け不正リクエスト ban
+#
+# Caddy のアクセスログを監視し、不正パターンを検出した IP を ban する。
+#
+# 配置先: /etc/fail2ban/jail.d/caddy-ndp.local
+
+[caddy-ndp]
+enabled  = true
+port     = http,https
+filter   = caddy-ndp
+logpath  = /var/log/caddy/access.log
+
+# polling: ログファイル未存在時にエラーではなく待機する
+backend  = polling
+
+# 10 分間に 5 回検出で ban
+maxretry = 5
+findtime = 600
+
+# ban 期間: 1 時間
+bantime  = 3600
+
+# ban アクション（iptables でドロップ）
+action   = iptables-multiport[name=caddy-ndp, port="http,https", protocol=tcp]

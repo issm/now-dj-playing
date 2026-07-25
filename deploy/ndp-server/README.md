@@ -26,6 +26,9 @@ deploy/ndp-server/
 ├── dist/                 # ビルド成果物（.gitignore 対象）
 ├── etc/
 │   ├── Caddyfile         # Caddy 設定テンプレート
+│   ├── fail2ban/
+│   │   ├── caddy-ndp.conf   # fail2ban filter 定義
+│   │   └── caddy-ndp.local  # fail2ban jail 定義
 │   └── ndp-server.service # systemd ユニットファイル
 ├── .env.example          # デプロイ設定テンプレート
 └── README.md
@@ -69,12 +72,16 @@ bash:
 ```bash
 scp -i "$DEPLOY_SSH_KEY" etc/ndp-server.service "${DEPLOY_USER}@${DEPLOY_HOST}:/tmp/"
 scp -i "$DEPLOY_SSH_KEY" /tmp/Caddyfile.generated "${DEPLOY_USER}@${DEPLOY_HOST}:/tmp/Caddyfile"
+scp -i "$DEPLOY_SSH_KEY" etc/fail2ban/caddy-ndp.conf "${DEPLOY_USER}@${DEPLOY_HOST}:/tmp/"
+scp -i "$DEPLOY_SSH_KEY" etc/fail2ban/caddy-ndp.local "${DEPLOY_USER}@${DEPLOY_HOST}:/tmp/"
 ```
 
 fish:
 ```fish
 scp -i "$DEPLOY_SSH_KEY" etc/ndp-server.service "$DEPLOY_USER@$DEPLOY_HOST:/tmp/"
 scp -i "$DEPLOY_SSH_KEY" /tmp/Caddyfile.generated "$DEPLOY_USER@$DEPLOY_HOST:/tmp/Caddyfile"
+scp -i "$DEPLOY_SSH_KEY" etc/fail2ban/caddy-ndp.conf "$DEPLOY_USER@$DEPLOY_HOST:/tmp/"
+scp -i "$DEPLOY_SSH_KEY" etc/fail2ban/caddy-ndp.local "$DEPLOY_USER@$DEPLOY_HOST:/tmp/"
 ```
 
 ### 4. 専用ユーザ作成（リモートで実行）
@@ -105,24 +112,120 @@ curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' \
 sudo apt update
 sudo apt install caddy
 
+# アクセスログディレクトリ・ファイル作成（Caddyfile の log 出力先）
+sudo mkdir -p /var/log/caddy
+sudo touch /var/log/caddy/access.log
+sudo chown -R caddy:caddy /var/log/caddy
+
 # Caddyfile 配置
 sudo mv /tmp/Caddyfile /etc/caddy/Caddyfile
 sudo systemctl reload caddy
 ```
 
-### 7. DNS 設定
+### 7. fail2ban セットアップ（リモートで実行）
+
+不正リクエストを送信する IP を自動 ban する。
+
+```bash
+# fail2ban インストール
+sudo apt install -y fail2ban
+
+# filter 配置
+sudo cp /tmp/caddy-ndp.conf /etc/fail2ban/filter.d/caddy-ndp.conf
+
+# jail 配置
+sudo cp /tmp/caddy-ndp.local /etc/fail2ban/jail.d/caddy-ndp.local
+
+# fail2ban 起動・有効化
+sudo systemctl enable fail2ban
+sudo systemctl restart fail2ban
+
+# 動作確認
+sudo fail2ban-client status caddy-ndp
+```
+
+### 8. DNS 設定
 
 Value Domain で A レコードを設定:
 ```
 a ndp <Lightsail Static IP>
 ```
 
-### 8. 動作確認
+### 9. 動作確認
 
 DNS 浸透後、ローカルから:
 ```bash
 curl https://<DEPLOY_DOMAIN>/health
 # 期待: {"status":"ok","version":"..."}
+```
+
+## 既存環境への fail2ban 追加
+
+すでに稼働中の環境に fail2ban を追加する場合の手順。
+
+### 1. Caddyfile 再生成・転送（ローカルで実行）
+
+Caddyfile に `log` ディレクティブが追加されているため、再生成して転送する:
+
+bash:
+```bash
+source .env
+sed "s/{\\\$DOMAIN}/$DEPLOY_DOMAIN/" etc/Caddyfile > /tmp/Caddyfile.generated
+scp -i "$DEPLOY_SSH_KEY" /tmp/Caddyfile.generated "${DEPLOY_USER}@${DEPLOY_HOST}:/tmp/Caddyfile"
+scp -i "$DEPLOY_SSH_KEY" etc/fail2ban/caddy-ndp.conf "${DEPLOY_USER}@${DEPLOY_HOST}:/tmp/"
+scp -i "$DEPLOY_SSH_KEY" etc/fail2ban/caddy-ndp.local "${DEPLOY_USER}@${DEPLOY_HOST}:/tmp/"
+```
+
+fish:
+```fish
+for line in (grep -v '^\s*#' .env | grep -v '^\s*$')
+    set -l kv (string replace -r '^export\s+' '' -- $line)
+    set -l key (string split -m1 '=' -- $kv)[1]
+    set -l val (string split -m1 '=' -- $kv)[2]
+    set -gx $key $val
+end
+
+sed "s/{\\\$DOMAIN}/$DEPLOY_DOMAIN/" etc/Caddyfile > /tmp/Caddyfile.generated
+scp -i "$DEPLOY_SSH_KEY" /tmp/Caddyfile.generated "$DEPLOY_USER@$DEPLOY_HOST:/tmp/Caddyfile"
+scp -i "$DEPLOY_SSH_KEY" etc/fail2ban/caddy-ndp.conf "$DEPLOY_USER@$DEPLOY_HOST:/tmp/"
+scp -i "$DEPLOY_SSH_KEY" etc/fail2ban/caddy-ndp.local "$DEPLOY_USER@$DEPLOY_HOST:/tmp/"
+```
+
+### 2. Caddy アクセスログ有効化（リモートで実行）
+
+```bash
+# ログディレクトリ・ファイル作成
+sudo mkdir -p /var/log/caddy
+sudo touch /var/log/caddy/access.log
+sudo chown -R caddy:caddy /var/log/caddy
+
+# Caddyfile 更新・reload
+sudo mv /tmp/Caddyfile /etc/caddy/Caddyfile
+sudo systemctl reload caddy
+
+# ログ出力を確認
+sleep 2
+ls -la /var/log/caddy/access.log
+```
+
+### 3. fail2ban インストール・設定（リモートで実行）
+
+```bash
+# fail2ban インストール
+sudo apt install -y fail2ban
+
+# filter 配置
+sudo cp /tmp/caddy-ndp.conf /etc/fail2ban/filter.d/caddy-ndp.conf
+
+# jail 配置
+sudo cp /tmp/caddy-ndp.local /etc/fail2ban/jail.d/caddy-ndp.local
+
+# fail2ban 起動・有効化
+sudo systemctl enable fail2ban
+sudo systemctl restart fail2ban
+
+# 動作確認
+sudo fail2ban-client status caddy-ndp
 ```
 
 ## デプロイ手順（2 回目以降）
@@ -153,6 +256,18 @@ ssh admin@HOST sudo systemctl restart ndp-server
 
 # Caddy ログ確認
 ssh admin@HOST sudo journalctl -u caddy -f
+
+# Caddy アクセスログ確認
+ssh admin@HOST sudo tail -f /var/log/caddy/access.log
+
+# fail2ban ステータス確認
+ssh admin@HOST sudo fail2ban-client status caddy-ndp
+
+# ban 中の IP 一覧
+ssh admin@HOST sudo fail2ban-client status caddy-ndp | grep "Banned IP"
+
+# 手動 unban
+ssh admin@HOST sudo fail2ban-client set caddy-ndp unbanip <IP>
 ```
 
 ## トラブルシューティング
@@ -169,3 +284,10 @@ Caddy が TLS 証明書を取得できていない。以下を確認:
 - ログ確認: `sudo journalctl -u ndp-server -e`
 - バイナリの実行権限: `ls -la /opt/ndp-server/ndp-server`
 - ポート競合: `ss -tlnp | grep 8080`
+
+### fail2ban が動作しない
+
+- ステータス確認: `sudo systemctl status fail2ban`
+- jail が有効か: `sudo fail2ban-client status`
+- filter テスト: `sudo fail2ban-regex /var/log/caddy/access.log /etc/fail2ban/filter.d/caddy-ndp.conf`
+- ログ確認: `sudo tail -f /var/log/fail2ban.log`

@@ -5,6 +5,15 @@
 # 例: sed 's/{$DOMAIN}/ndp.iss.ms/' etc/Caddyfile
 
 {$DOMAIN} {
+    # アクセスログ出力（fail2ban が監視する）
+    log {
+        output file /var/log/caddy/access.log {
+            roll_size 100MiB
+            roll_keep 5
+        }
+        format json
+    }
+
     reverse_proxy 127.0.0.1:8080
 
     # SSE 用: バッファリング無効化
