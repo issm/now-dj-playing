@@ -5,7 +5,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import type { TrackPayload, AppConfig, BackgroundImageEntry, BackgroundImageConfig } from "./types";
 import { parseComment, type ParsedComment } from "./commentParser";
-import { useDataSource } from "./useDataSource";
+import { useLocalDataSource, connectWebSession, destroyWebSession, type WebSession } from "./useDataSource";
 import { resolveImageSrc } from "./artwork";
 import MonitorView from "./MonitorView";
 import BackgroundPicker from "./BackgroundPicker";
@@ -41,6 +41,12 @@ function App() {
     const [appConfig, setAppConfig] = useState<AppConfig | null>(null);
     /** web モードのセッションコード */
     const [sessionCode, setSessionCode] = useState<string | null>(null);
+    /** web セッション情報（接続中に保持） */
+    const [webSession, setWebSession] = useState<WebSession | null>(null);
+    /** web SSE 接続の cleanup 関数 */
+    const webCleanupRef = useRef<(() => void) | null>(null);
+    /** web モード接続中フラグ */
+    const [connecting, setConnecting] = useState(false);
     /** 参加中 DJ 一覧（id → 表示名） */
     const [roster, setRoster] = useState<Map<string, string>>(new Map());
 
@@ -90,25 +96,101 @@ function App() {
         }
     };
 
-    // 設定を再読み込みしてデータソースを再起動する
-    // データソースの起動自体は useDataSource が appConfig の変更を検知して行う
+    // 設定を再読み込みする
+    // web モードではセッションを維持する（serverUrl 変更時のみ破棄）
     const handleReloadConfig = async () => {
         setReloading(true);
         setError(null);
         setInfoMessage(null);
         setInfoDismissing(false);
-        setSessionCode(null);
-        setTrack(null);
-        setRoster(new Map());
         try {
             const config = await invoke<AppConfig>("reload_config");
             applyConfig(config);
+
+            // web モードで serverUrl が変わった場合はセッションを破棄
+            if (
+                config.mode === "web" &&
+                webSession &&
+                webSession.serverUrl !== config.web.serverUrl
+            ) {
+                // SSE 切断
+                if (webCleanupRef.current) {
+                    webCleanupRef.current();
+                    webCleanupRef.current = null;
+                }
+                // サーバー側セッション破棄
+                destroyWebSession(webSession);
+                setWebSession(null);
+                setSessionCode(null);
+                setTrack(null);
+                setRoster(new Map());
+            }
+
             setAppConfig(config);
         } catch (err) {
             setError(String(err));
         } finally {
             setReloading(false);
         }
+    };
+
+    // web モード: Connect ボタン押下時にセッション作成 + SSE 接続
+    const handleConnect = async () => {
+        if (!appConfig || appConfig.mode !== "web") return;
+        setConnecting(true);
+        setError(null);
+
+        const cleanup = await connectWebSession(
+            appConfig,
+            {
+                onTrack: (track) => {
+                    setTrack(track);
+                    setError(null);
+                    const djId = track.dirName;
+                    const djDisplayName = track.djName ?? track.dirName;
+                    setRoster((prev) => {
+                        if (prev.get(djId) === djDisplayName) return prev;
+                        const next = new Map(prev);
+                        next.set(djId, djDisplayName);
+                        return next;
+                    });
+                },
+                onError: (message) => {
+                    setError(message);
+                },
+                onDjJoined: (dj) => {
+                    setRoster((prev) => {
+                        if (prev.get(dj.id) === dj.djName) return prev;
+                        const next = new Map(prev);
+                        next.set(dj.id, dj.djName);
+                        return next;
+                    });
+                },
+                onDjLeft: (dj) => {
+                    setRoster((prev) => {
+                        if (!prev.has(dj.id)) return prev;
+                        const next = new Map(prev);
+                        next.delete(dj.id);
+                        return next;
+                    });
+                },
+            },
+            (session) => {
+                setWebSession(session);
+                setSessionCode(session.code);
+                // Rust 側にセッション情報を保存（終了時 destroy 用）
+                invoke("set_web_session", {
+                    sessionId: session.sessionId,
+                    viewerToken: session.viewerToken,
+                    serverUrl: session.serverUrl,
+                }).catch((err) => {
+                    console.warn("[web] set_web_session failed:", err);
+                });
+            },
+        );
+
+        webCleanupRef.current = cleanup;
+        setConnecting(false);
     };
 
     // 背景画像選択ハンドラ
@@ -226,13 +308,11 @@ function App() {
         };
     }, [isMonitor]);
 
-    // データソースフック（config が取得されたら開始）
-    useDataSource(isMonitor ? null : appConfig, {
+    // local モード用データソースフック（config が取得されたら開始）
+    useLocalDataSource(isMonitor ? null : appConfig, {
         onTrack: (track) => {
             setTrack(track);
             setError(null);
-            // track_changed の DJ を参加中一覧に追加/更新する
-            // （local モードではこれだけで n=1 の一覧になる）
             const djId = track.dirName;
             const djDisplayName = track.djName ?? track.dirName;
             setRoster((prev) => {
@@ -244,9 +324,6 @@ function App() {
         },
         onError: (message) => {
             setError(message);
-        },
-        onSessionCreated: (code) => {
-            setSessionCode(code);
         },
         onDjJoined: (dj) => {
             setRoster((prev) => {
@@ -333,7 +410,16 @@ function App() {
                 />
 
                 <div className={`flex min-h-0 flex-1 w-full flex-col items-center ${track ? "justify-center" : "justify-start"}`}>
-                    {track ? <TrackBody track={track} showComments={showComments} showTags={showTags} /> : <WaitingScreen sessionCode={sessionCode} />}
+                    {track ? (
+                        <TrackBody track={track} showComments={showComments} showTags={showTags} />
+                    ) : (
+                        <WaitingScreen
+                            sessionCode={sessionCode}
+                            showConnectButton={appConfig?.mode === "web" && !webSession}
+                            connecting={connecting}
+                            onConnect={handleConnect}
+                        />
+                    )}
                 </div>
             </div>
 
@@ -408,16 +494,36 @@ function ShortcutOverlay({ sessionCode, onClose }: { sessionCode: string | null;
     );
 }
 
-function WaitingScreen({ sessionCode }: { sessionCode: string | null }) {
+function WaitingScreen({
+    sessionCode,
+    showConnectButton,
+    connecting,
+    onConnect,
+}: {
+    sessionCode: string | null;
+    showConnectButton: boolean;
+    connecting: boolean;
+    onConnect: () => void;
+}) {
     return (
         <div className="pt-48 text-center">
             <h1 className="text-4xl font-bold">now-dj-playing</h1>
-            <p className="mt-4 text-lg text-gray-400">
-                トラック情報を待機中...
-                {sessionCode && (
-                    <span className="ml-2 font-mono text-gray-500">({sessionCode})</span>
-                )}
-            </p>
+            {showConnectButton ? (
+                <button
+                    onClick={onConnect}
+                    disabled={connecting}
+                    className="mt-6 rounded bg-green-600 px-3 py-1 text-base font-semibold text-white hover:bg-green-500 disabled:opacity-50"
+                >
+                    {connecting ? "接続中..." : "Connect"}
+                </button>
+            ) : (
+                <p className="mt-4 text-lg text-gray-400">
+                    トラック情報を待機中...
+                    {sessionCode && (
+                        <span className="ml-2 font-mono text-gray-500">({sessionCode})</span>
+                    )}
+                </p>
+            )}
         </div>
     );
 }
