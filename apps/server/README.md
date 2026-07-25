@@ -18,6 +18,7 @@ now-dj-playing の中継サーバ。publisher から楽曲情報を受信し、S
 | GET | `/health` | ヘルスチェック | なし |
 | POST | `/api/sessions/create` | セッション作成 (viewer 用) | なし |
 | POST | `/api/sessions/join` | セッション参加 (publisher 用) | なし |
+| DELETE | `/api/sessions/{id}` | セッション破棄 (viewer 用) | Bearer トークン (viewer_token) |
 | POST | `/api/sessions/{id}/publish` | 楽曲情報の送信 | Bearer トークン |
 | POST | `/api/sessions/{id}/leave` | セッション離脱 | Bearer トークン |
 | GET | `/api/sessions/{id}/stream` | SSE ストリーム (viewer 用) | Bearer トークン |
@@ -38,6 +39,7 @@ now-dj-playing の中継サーバ。publisher から楽曲情報を受信し、S
 3. publisher が `POST /api/sessions/{id}/publish` で楽曲情報を送信 (Bearer トークン必須)
 4. viewer が `GET /api/sessions/{id}/stream` で SSE 接続 → イベントを受信
 5. publisher が `POST /api/sessions/{id}/leave` で離脱 → viewer に `publisher_left` が配信
+6. viewer が `DELETE /api/sessions/{id}` でセッションを破棄 (アプリ終了時等)
 
 ## 開発
 
