@@ -138,13 +138,14 @@ function App() {
   const handleLeave = async () => {
     try {
       await invoke("leave_session");
-      setJoined(false);
-      setCode("");
     } catch (_) {
       // leave 失敗時も UI 上は離脱扱いにする（セッション無効の可能性）
-      setJoined(false);
-      setCode("");
     }
+    setJoined(false);
+    setCode("");
+    setPublishStatus("idle");
+    setPublishError("");
+    setLastTrack(null);
   };
 
   const handleReloadConfig = async () => {
