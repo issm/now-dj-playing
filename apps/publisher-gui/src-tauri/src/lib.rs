@@ -319,6 +319,36 @@ fn check_dir_exists(path: String) -> bool {
     Path::new(&expanded).is_dir()
 }
 
+/// 画像ファイルを読み取り Base64 Data URI を返す
+#[tauri::command]
+fn read_image_as_data_uri(path: String) -> Result<String, String> {
+    let file_path = Path::new(&path);
+    if !file_path.is_file() {
+        return Err(format!("ファイルが見つかりません: {}", path));
+    }
+
+    let ext = file_path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+
+    let mime = match ext.as_str() {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "bmp" => "image/bmp",
+        "svg" => "image/svg+xml",
+        _ => return Err(format!("未対応の画像形式: {}", ext)),
+    };
+
+    let data = std::fs::read(file_path).map_err(|e| format!("読み込みに失敗: {}", e))?;
+    let b64 = base64::engine::general_purpose::STANDARD.encode(&data);
+
+    Ok(format!("data:{};base64,{}", mime, b64))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app = tauri::Builder::default()
@@ -335,6 +365,7 @@ pub fn run() {
             leave_session,
             publish,
             check_dir_exists,
+            read_image_as_data_uri,
             open_config_folder,
             get_version,
         ])

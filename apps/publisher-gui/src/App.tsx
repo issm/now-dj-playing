@@ -2,7 +2,6 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open } from "@tauri-apps/plugin-dialog";
-import { convertFileSrc } from "@tauri-apps/api/core";
 
 type Tab = "base" | "web" | "local";
 type PublishStatus = "idle" | "success" | "error";
@@ -48,6 +47,7 @@ function App() {
   // 共通
   const [djName, setDjName] = useState("");
   const [djImage, setDjImage] = useState<string | null>(null);
+  const [djImageDataUri, setDjImageDataUri] = useState<string | null>(null);
 
   // web モード
   const [endpointUrl, setEndpointUrl] = useState("");
@@ -95,6 +95,17 @@ function App() {
       setPublishBaseDirExists(false);
     }
   }, [publishBaseDir]);
+
+  // dj_image パスから Data URI を取得
+  useEffect(() => {
+    if (djImage) {
+      invoke<string>("read_image_as_data_uri", { path: djImage })
+        .then(setDjImageDataUri)
+        .catch(() => setDjImageDataUri(null));
+    } else {
+      setDjImageDataUri(null);
+    }
+  }, [djImage]);
 
   // publish 実行
   const doPublish = useCallback(
@@ -207,6 +218,7 @@ function App() {
 
   const handleClearDjImage = () => {
     setDjImage(null);
+    setDjImageDataUri(null);
   };
 
   // web モードで join 済みの場合、入力を無効化
@@ -271,54 +283,47 @@ function App() {
       {/* タブコンテンツ */}
       {tab === "base" && (
         <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-2">
-            <label className="shrink-0 text-xs text-gray-400">DJ 名</label>
-            <input
-              className={`flex-1 bg-gray-800 border rounded px-2 py-1 text-xs ${inputBorder(djName.length > 0)}`}
-              value={djName}
-              onChange={(e) => setDjName(e.target.value)}
-            />
-          </div>
-
-          {/* DJ 画像 */}
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center justify-between">
-              <label className="text-xs text-gray-400">DJ 画像</label>
-              {djImage && (
-                <button
-                  className="text-[10px] text-red-400 hover:text-red-300"
-                  onClick={handleClearDjImage}
-                >
-                  クリア
-                </button>
-              )}
-            </div>
-            <div
-              className={`flex items-center justify-center border-2 border-dashed rounded-lg h-24 transition-colors ${isDragOver && tab === "base"
-                ? "border-blue-400 bg-blue-900/30"
-                : djImage
-                  ? "border-green-600 bg-gray-800/50"
-                  : "border-gray-600 bg-gray-800/50"
-                }`}
-            >
-              {djImage ? (
-                <img
-                  src={convertFileSrc(djImage)}
-                  alt="DJ 画像"
-                  className="max-h-20 max-w-full object-contain rounded"
-                />
-              ) : (
-                <span className="text-gray-500 text-xs">
-                  画像をドロップ
-                </span>
-              )}
-            </div>
+          <div className="flex items-center justify-between">
+            <label className="text-xs text-gray-400">DJ 名</label>
             {djImage && (
-              <p className="text-[10px] text-gray-500 truncate" title={djImage}>
-                {djImage}
-              </p>
+              <button
+                className="text-[10px] text-red-400 hover:text-red-300"
+                onClick={handleClearDjImage}
+              >
+                画像クリア
+              </button>
             )}
           </div>
+          <input
+            className={`w-full bg-gray-800 border rounded px-2 py-1 text-xs ${inputBorder(djName.length > 0)}`}
+            value={djName}
+            onChange={(e) => setDjName(e.target.value)}
+          />
+          <div
+            className={`flex items-center justify-center border-2 border-dashed rounded-lg h-24 transition-colors ${isDragOver && tab === "base"
+              ? "border-blue-400 bg-blue-900/30"
+              : djImage
+                ? "border-green-600 bg-gray-800/50"
+                : "border-gray-600 bg-gray-800/50"
+              }`}
+          >
+            {djImage ? (
+              <img
+                src={djImageDataUri ?? ""}
+                alt="DJ 画像"
+                className="max-h-20 max-w-full object-contain rounded"
+              />
+            ) : (
+              <span className="text-gray-500 text-xs">
+                画像をドロップ
+              </span>
+            )}
+          </div>
+          {djImage && (
+            <p className="text-[10px] text-gray-500 truncate" title={djImage}>
+              {djImage}
+            </p>
+          )}
         </div>
       )}
 
