@@ -68,6 +68,21 @@ join(code, dj_name,    → Publisher{dj_image}     → SSE publisher_joined
 - web モード: join 時のみ送信（publish 時には含めない）
 - local モード: publish のたびにファイルコピー
 
+## viewer 表示ルール
+
+- DJ 画像が指定されている場合: **画像のみ表示**（テキスト名は非表示）
+- DJ 画像が未指定の場合: テキスト名を表示
+- 画像は全体を表示（`object-contain`）、ロスター領域の高さに収める
+- 複数 DJ 時も各 DJ 個別に画像 or テキストを出し分ける
+
+## join_only のオーバーライド
+
+`web::join_only` は `dj_image_override: Option<&Path>` パラメータを持つ。
+
+- CLI: `None` を渡し、`AppConfig` の `dj_image_path()` を使用
+- publisher-gui: フロントエンドの最新の `djImage` ステートをパスとして渡す
+  - GUI 上で画像を差し替えた後の再 join で、古い config のキャッシュではなく最新のパスが使用される
+
 ## 影響
 
 - `apps/publisher/src/config.rs`: `BaseConfig` 構造体追加、`AppConfig` に `dj_image()` / `dj_image_path()` メソッド追加
