@@ -372,7 +372,7 @@ function App() {
                     <span>{infoMessage}</span>
                     <button
                         onClick={dismissInfo}
-                        className="ml-4 text-green-300 hover:text-white"
+                        className="ml-4 cursor-pointer text-green-300 hover:text-white"
                         aria-label="閉じる"
                     >
                         &times;
@@ -387,7 +387,7 @@ function App() {
                     <button
                         onClick={handleReloadConfig}
                         disabled={reloading}
-                        className="ml-4 shrink-0 rounded bg-red-700 px-3 py-1 text-xs text-red-100 hover:bg-red-600 disabled:opacity-50"
+                        className="ml-4 shrink-0 cursor-pointer rounded bg-red-700 px-3 py-1 text-xs text-red-100 hover:bg-red-600 disabled:opacity-50"
                     >
                         {reloading ? "読込中..." : "再読み込み"}
                     </button>
@@ -512,7 +512,7 @@ function WaitingScreen({
                 <button
                     onClick={onConnect}
                     disabled={connecting}
-                    className="mt-6 rounded bg-green-600 px-3 py-1 text-base font-semibold text-white hover:bg-green-500 disabled:opacity-50"
+                    className="mt-6 cursor-pointer rounded bg-green-600 px-3 py-1 text-base font-semibold text-white hover:bg-green-500 disabled:opacity-50"
                 >
                     {connecting ? "接続中..." : "Connect"}
                 </button>
