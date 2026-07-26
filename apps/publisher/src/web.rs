@@ -24,6 +24,8 @@ struct SessionInfo {
 struct JoinRequest {
     code: String,
     dj_name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    dj_image: Option<String>,
 }
 
 /// join API のレスポンス
@@ -104,7 +106,14 @@ pub fn leave(config: &AppConfig) -> Result<()> {
 }
 
 /// join のみ実行して終了する (-J, --join-only)
-pub fn join_only(config: &AppConfig, dj_name: &str, code: Option<&str>) -> Result<()> {
+///
+/// `dj_image_override` が指定された場合、config の dj_image_path() よりも優先する。
+pub fn join_only(
+    config: &AppConfig,
+    dj_name: &str,
+    code: Option<&str>,
+    dj_image_override: Option<&Path>,
+) -> Result<()> {
     let endpoint_url = config.web_endpoint_url().ok_or_else(|| {
         anyhow::anyhow!(
             "エンドポイント URL が未指定です。設定ファイルの web.endpoint_url を設定してください"
@@ -121,7 +130,18 @@ pub fn join_only(config: &AppConfig, dj_name: &str, code: Option<&str>) -> Resul
         anyhow::anyhow!("セッションコードが必要です。-C で 6 桁コードを指定してください")
     })?;
 
-    let session = do_join(&endpoint_url, dj_name, code)?;
+    // dj_image を読み込み・リサイズ（override 優先）
+    let dj_image_data_uri = if let Some(override_path) = dj_image_override {
+        if override_path.is_file() {
+            Some(resize_and_encode_image_file(override_path)?)
+        } else {
+            None
+        }
+    } else {
+        load_dj_image_data_uri(config)?
+    };
+
+    let session = do_join(&endpoint_url, dj_name, code, dj_image_data_uri.as_deref())?;
     save_session_file(&session_path, &session)?;
 
     eprintln!("✅ セッション参加完了");
@@ -151,8 +171,17 @@ pub fn publish_web(
         )
     })?;
 
+    // dj_image を読み込み・リサイズ（再 join 時に使用）
+    let dj_image_data_uri = load_dj_image_data_uri(config)?;
+
     // セッション情報の取得
-    let session = resolve_session(&endpoint_url, &session_path, dj_name, code)?;
+    let session = resolve_session(
+        &endpoint_url,
+        &session_path,
+        dj_name,
+        code,
+        dj_image_data_uri.as_deref(),
+    )?;
 
     // publish 実行
     let publish_result = do_publish(&endpoint_url, &session, meta);
@@ -169,7 +198,12 @@ pub fn publish_web(
                 )
             })?;
             eprintln!("  セッション無効 (401)、再参加を試行...");
-            let new_session = do_join(&endpoint_url, dj_name, rejoin_code)?;
+            let new_session = do_join(
+                &endpoint_url,
+                dj_name,
+                rejoin_code,
+                dj_image_data_uri.as_deref(),
+            )?;
             save_session_file(&session_path, &new_session)?;
 
             // publish 再試行
@@ -198,6 +232,7 @@ fn resolve_session(
     session_path: &Path,
     dj_name: &str,
     code: Option<&str>,
+    dj_image: Option<&str>,
 ) -> Result<SessionInfo> {
     // 既存セッションファイルの読み込み試行
     if let Ok(content) = fs::read_to_string(session_path) {
@@ -212,18 +247,24 @@ fn resolve_session(
         anyhow::anyhow!("セッションコードが必要です。-C で 6 桁コードを指定してください")
     })?;
 
-    let session = do_join(endpoint_url, dj_name, join_code)?;
+    let session = do_join(endpoint_url, dj_name, join_code, dj_image)?;
     save_session_file(session_path, &session)?;
 
     Ok(session)
 }
 
 /// join API を呼び出す
-fn do_join(endpoint_url: &str, dj_name: &str, code: &str) -> Result<SessionInfo> {
+fn do_join(
+    endpoint_url: &str,
+    dj_name: &str,
+    code: &str,
+    dj_image: Option<&str>,
+) -> Result<SessionInfo> {
     let join_url = format!("{}/sessions/join", endpoint_url.trim_end_matches('/'));
     let join_body = JoinRequest {
         code: code.to_string(),
         dj_name: dj_name.to_string(),
+        dj_image: dj_image.map(|s| s.to_string()),
     };
 
     let client = reqwest::blocking::Client::new();
@@ -307,10 +348,84 @@ fn is_unauthorized_error(e: &anyhow::Error) -> bool {
     e.to_string().contains("HTTP 401")
 }
 
-/// アートワーク画像の最大辺 (px)
-const ARTWORK_MAX_DIMENSION: u32 = 800;
+/// 画像の最大辺 (px)
+const IMAGE_MAX_DIMENSION: u32 = 800;
 
-/// アートワークを 640x640 に収まるようリサイズし、Base64 Data URI を返す
+/// 設定ファイルの dj_image パスから画像を読み込み、800x800 にリサイズして Data URI を返す
+///
+/// dj_image が未設定の場合は None を返す。
+fn load_dj_image_data_uri(config: &AppConfig) -> Result<Option<String>> {
+    let image_path = match config.dj_image_path() {
+        Some(p) => p,
+        None => return Ok(None),
+    };
+
+    if !image_path.is_file() {
+        eprintln!(
+            "  警告: dj_image が見つかりません: {}",
+            image_path.display()
+        );
+        return Ok(None);
+    }
+
+    let data_uri = resize_and_encode_image_file(&image_path)?;
+    Ok(Some(data_uri))
+}
+
+/// 画像ファイルを読み込み、800x800 に収まるようリサイズして Base64 Data URI を返す
+fn resize_and_encode_image_file(path: &Path) -> Result<String> {
+    use image::ImageReader;
+
+    let img = ImageReader::open(path)
+        .with_context(|| format!("画像ファイルを開けません: {}", path.display()))?
+        .decode()
+        .with_context(|| format!("画像のデコードに失敗: {}", path.display()))?;
+
+    let (w, h) = (img.width(), img.height());
+
+    let resized = if w > IMAGE_MAX_DIMENSION || h > IMAGE_MAX_DIMENSION {
+        img.resize(
+            IMAGE_MAX_DIMENSION,
+            IMAGE_MAX_DIMENSION,
+            image::imageops::FilterType::Lanczos3,
+        )
+    } else {
+        img
+    };
+
+    // 拡張子で出力形式を決定
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+
+    let (format, mime) = if ext == "png" {
+        (image::ImageFormat::Png, "image/png")
+    } else {
+        (image::ImageFormat::Jpeg, "image/jpeg")
+    };
+
+    let mut buf = Vec::new();
+    let mut cursor = std::io::Cursor::new(&mut buf);
+    resized
+        .write_to(&mut cursor, format)
+        .context("画像の再エンコードに失敗")?;
+
+    let b64 = base64::engine::general_purpose::STANDARD.encode(&buf);
+
+    eprintln!(
+        "  DJ 画像 (送信): {} {}x{} ({})",
+        if ext == "png" { "PNG" } else { "JPEG" },
+        resized.width(),
+        resized.height(),
+        format_size(buf.len())
+    );
+
+    Ok(format!("data:{};base64,{}", mime, b64))
+}
+
+/// アートワークを 800x800 に収まるようリサイズし、Base64 Data URI を返す
 /// 元の画像形式 (JPEG/PNG) を維持する
 fn resize_and_encode_artwork(art: &crate::tags::ArtworkData) -> Result<String> {
     use image::ImageReader;
@@ -324,10 +439,10 @@ fn resize_and_encode_artwork(art: &crate::tags::ArtworkData) -> Result<String> {
 
     let (w, h) = (img.width(), img.height());
 
-    let resized = if w > ARTWORK_MAX_DIMENSION || h > ARTWORK_MAX_DIMENSION {
+    let resized = if w > IMAGE_MAX_DIMENSION || h > IMAGE_MAX_DIMENSION {
         img.resize(
-            ARTWORK_MAX_DIMENSION,
-            ARTWORK_MAX_DIMENSION,
+            IMAGE_MAX_DIMENSION,
+            IMAGE_MAX_DIMENSION,
             image::imageops::FilterType::Lanczos3,
         )
     } else {

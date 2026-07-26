@@ -18,6 +18,8 @@ pub enum SessionEvent {
     PublisherJoined {
         publisher_id: String,
         dj_name: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        dj_image: Option<String>,
     },
     #[serde(rename = "publisher_left")]
     PublisherLeft {
@@ -59,6 +61,7 @@ pub struct Session {
 pub struct Publisher {
     pub id: String,
     pub dj_name: String,
+    pub dj_image: Option<String>,
     pub token: String,
 }
 
@@ -108,7 +111,12 @@ impl SessionStore {
     }
 
     /// コードでセッションを検索し、publisher を追加する
-    pub fn join_by_code(&self, code: &str, dj_name: &str) -> Result<(Session, Publisher), JoinError> {
+    pub fn join_by_code(
+        &self,
+        code: &str,
+        dj_name: &str,
+        dj_image: Option<&str>,
+    ) -> Result<(Session, Publisher), JoinError> {
         let mut sessions = self.sessions.lock().unwrap();
 
         let session = sessions
@@ -122,6 +130,7 @@ impl SessionStore {
         let publisher = Publisher {
             id: publisher_id,
             dj_name: dj_name.to_string(),
+            dj_image: dj_image.map(|s| s.to_string()),
             token,
         };
 
@@ -133,6 +142,7 @@ impl SessionStore {
             let _ = ch.tx.send(SessionEvent::PublisherJoined {
                 publisher_id: publisher.id.clone(),
                 dj_name: publisher.dj_name.clone(),
+                dj_image: publisher.dj_image.clone(),
             });
         }
 
@@ -302,6 +312,7 @@ pub async fn create_session(
 pub struct JoinSessionRequest {
     pub code: String,
     pub dj_name: String,
+    pub dj_image: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -321,7 +332,7 @@ pub async fn join_session(
     State(store): State<Arc<SessionStore>>,
     Json(body): Json<JoinSessionRequest>,
 ) -> Result<Json<JoinSessionResponse>, (StatusCode, Json<ErrorResponse>)> {
-    match store.join_by_code(&body.code, &body.dj_name) {
+    match store.join_by_code(&body.code, &body.dj_name, body.dj_image.as_deref()) {
         Ok((session, publisher)) => Ok(Json(JoinSessionResponse {
             session_id: session.id,
             publisher_id: publisher.id,

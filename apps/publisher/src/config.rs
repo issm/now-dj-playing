@@ -9,12 +9,25 @@ use serde::Deserialize;
 /// 設定ファイルの構造
 #[derive(Debug, Deserialize, Default)]
 pub struct ConfigFile {
-    /// DJ 名 (テキスト) またはロゴ画像パス
+    /// 基本設定（新構造）
+    pub base: Option<BaseConfig>,
+    /// DJ 名 (後方互換: base.dj_name が未設定の場合のフォールバック)
     pub dj_name: Option<String>,
+    /// DJ 画像パス (後方互換: base.dj_image が未設定の場合のフォールバック)
+    pub dj_image: Option<String>,
     /// local モード設定
     pub local: Option<LocalConfig>,
     /// web モード設定
     pub web: Option<WebConfig>,
+}
+
+/// 基本設定
+#[derive(Debug, Deserialize, Default)]
+pub struct BaseConfig {
+    /// DJ 名 (テキスト)
+    pub dj_name: Option<String>,
+    /// DJ 画像パス (画像ファイルのフルパス)
+    pub dj_image: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -41,8 +54,31 @@ pub struct AppConfig {
 
 impl AppConfig {
     /// dj_name を取得
+    ///
+    /// 優先順: base.dj_name → トップレベル dj_name
     pub fn dj_name(&self) -> Option<String> {
-        self.file.dj_name.clone()
+        self.file
+            .base
+            .as_ref()
+            .and_then(|b| b.dj_name.clone())
+            .or_else(|| self.file.dj_name.clone())
+    }
+
+    /// dj_image を取得
+    ///
+    /// 優先順: base.dj_image → トップレベル dj_image
+    pub fn dj_image(&self) -> Option<String> {
+        self.file
+            .base
+            .as_ref()
+            .and_then(|b| b.dj_image.clone())
+            .or_else(|| self.file.dj_image.clone())
+    }
+
+    /// dj_image をパス解決して取得
+    pub fn dj_image_path(&self) -> Option<PathBuf> {
+        self.dj_image()
+            .map(|raw| resolve_path(&raw, self.config_path.as_deref()))
     }
 
     /// local.dj_id を取得

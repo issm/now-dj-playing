@@ -7,6 +7,7 @@ import type { AppConfig, TrackPayload } from "./types";
 export interface DjJoined {
   id: string;
   djName: string;
+  djImage: string | null;
 }
 
 /** 離脱した DJ の情報 */
@@ -168,6 +169,7 @@ export async function connectWebSession(
         callbacks.onDjJoined?.({
           id: data.publisher_id,
           djName: data.dj_name,
+          djImage: data.dj_image ?? null,
         });
       } catch {
         // 無視

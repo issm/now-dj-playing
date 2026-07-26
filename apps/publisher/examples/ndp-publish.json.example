@@ -1,6 +1,13 @@
 {
-  // DJ 名 (テキスト) またはロゴ画像パス (png/jpg/jpeg)
-  "dj_name": "DJ サンプル",
+  // 基本設定
+  "base": {
+    // DJ 名 (テキスト)
+    "dj_name": "DJ サンプル",
+    // DJ 画像パス (省略可、画像ファイルのフルパス)
+    "dj_image": null
+  },
+  // 後方互換: base が未設定の場合、トップレベルの dj_name が使われる
+  // "dj_name": "DJ サンプル",
   // local モード向け
   "local": {
     "dj_id": "dj-000",
