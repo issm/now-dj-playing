@@ -477,18 +477,17 @@ function App() {
                     roster={roster}
                     currentDjId={track?.dirName ?? null}
                     djLogoSrc={resolveImageSrc(track?.djLogoPath ?? null, track?.updatedAt ?? "")}
+                    sessionCode={sessionCode}
+                    showConnectButton={appConfig?.mode === "web" && !webSession}
+                    connecting={connecting}
+                    onConnect={handleConnect}
                 />
 
                 <div className={`flex min-h-0 flex-1 w-full flex-col items-center ${track ? "justify-center" : "justify-start"}`}>
                     {track ? (
                         <TrackBody track={track} showComments={showComments} showTags={showTags} />
                     ) : (
-                        <WaitingScreen
-                            sessionCode={sessionCode}
-                            showConnectButton={appConfig?.mode === "web" && !webSession}
-                            connecting={connecting}
-                            onConnect={handleConnect}
-                        />
+                        <WaitingScreen />
                     )}
                 </div>
             </div>
@@ -565,36 +564,13 @@ function ShortcutOverlay({ sessionCode, onClose }: { sessionCode: string | null;
     );
 }
 
-function WaitingScreen({
-    sessionCode,
-    showConnectButton,
-    connecting,
-    onConnect,
-}: {
-    sessionCode: string | null;
-    showConnectButton: boolean;
-    connecting: boolean;
-    onConnect: () => void;
-}) {
+function WaitingScreen() {
     return (
         <div className="pt-48 text-center">
             <h1 className="text-4xl font-bold">now-dj-playing</h1>
-            {showConnectButton ? (
-                <button
-                    onClick={onConnect}
-                    disabled={connecting}
-                    className="mt-6 cursor-pointer rounded bg-green-600 px-3 py-1 text-base font-semibold text-white hover:bg-green-500 disabled:opacity-50"
-                >
-                    {connecting ? "接続中..." : "Connect"}
-                </button>
-            ) : (
-                <p className="mt-4 text-lg text-gray-400">
-                    トラック情報を待機中...
-                    {sessionCode && (
-                        <span className="ml-2 font-mono text-gray-500">({sessionCode})</span>
-                    )}
-                </p>
-            )}
+            <p className="mt-4 text-lg text-gray-400">
+                トラック情報を待機中...
+            </p>
         </div>
     );
 }
@@ -637,55 +613,86 @@ function DjRosterHeader({
     roster,
     currentDjId,
     djLogoSrc,
+    sessionCode,
+    showConnectButton,
+    connecting,
+    onConnect,
 }: {
     roster: Map<string, string>;
     currentDjId: string | null;
     djLogoSrc: string | null;
+    sessionCode: string | null;
+    showConnectButton: boolean;
+    connecting: boolean;
+    onConnect: () => void;
 }) {
     const entries = Array.from(roster.entries());
 
-    // n <= 1: 従来通りの単一表示（ハイライトなし）
-    // ロスターが空の場合も高さを確保するため、常にヘッダ自体は表示する
-    if (entries.length <= 1) {
-        const displayName = entries[0]?.[1] ?? null;
+    // 右端に表示する認証コード or Connect ボタン
+    const connectButton = showConnectButton ? (
+        <button
+            onClick={onConnect}
+            disabled={connecting}
+            className="cursor-pointer rounded bg-green-600 px-2 py-0.5 text-sm font-semibold text-white hover:bg-green-500 disabled:opacity-50"
+        >
+            {connecting ? "接続中..." : "Connect"}
+        </button>
+    ) : null;
 
+    const sessionCodeBadge = !showConnectButton && sessionCode ? (
+        <span className="font-mono text-base text-yellow-300/80">
+            {sessionCode}
+        </span>
+    ) : null;
+
+    // n == 0: ロスターが空（Connect ボタン / 認証コードは中央表示）
+    if (entries.length === 0) {
         return (
-            <header className="flex h-[100px] shrink-0 items-center justify-center gap-3 px-8">
-                {displayName && (
-                    <>
-                        {djLogoSrc ? (
-                            <img
-                                src={djLogoSrc}
-                                alt="DJ Logo"
-                                className="h-10 w-10 rounded-full object-cover md:h-12 md:w-12"
-                            />
-                        ) : null}
-                        <span className="text-xl font-semibold text-gray-300 md:text-3xl">
-                            {displayName}
-                        </span>
-                    </>
-                )}
+            <header className="relative flex h-[100px] shrink-0 items-center justify-center gap-3 px-8">
+                {connectButton}
+                {sessionCodeBadge}
             </header>
         );
     }
 
-    // n >= 2: 横並び表示 + 現在の DJ をハイライト
+    // n >= 1: 横並び表示 + 現在の DJ をハイライト + 認証コードは右端
     return (
-        <header className="flex h-[100px] shrink-0 flex-wrap items-center justify-center gap-x-8 gap-y-1 px-8">
-            {entries.map(([id, name]) => {
-                const isCurrent = id === currentDjId;
-                return (
-                    <span
-                        key={id}
-                        className={`px-2 text-xl font-semibold md:text-3xl ${isCurrent
-                            ? "border-b-4 border-yellow-500 text-white"
-                            : "border-b-4 border-transparent text-gray-500"
-                            }`}
-                    >
-                        {name}
+        <header className="relative flex h-[100px] shrink-0 flex-wrap items-center justify-center gap-x-8 gap-y-1 px-8">
+            {entries.length === 1 ? (
+                <>
+                    {djLogoSrc ? (
+                        <img
+                            src={djLogoSrc}
+                            alt="DJ Logo"
+                            className="h-10 w-10 rounded-full object-cover md:h-12 md:w-12"
+                        />
+                    ) : null}
+                    <span className="text-xl font-semibold text-gray-300 md:text-3xl">
+                        {entries[0]![1]}
                     </span>
-                );
-            })}
+                </>
+            ) : (
+                entries.map(([id, name]) => {
+                    const isCurrent = id === currentDjId;
+                    return (
+                        <span
+                            key={id}
+                            className={`px-2 text-xl font-semibold md:text-3xl ${isCurrent
+                                ? "border-b-4 border-yellow-500 text-white"
+                                : "border-b-4 border-transparent text-gray-500"
+                                }`}
+                        >
+                            {name}
+                        </span>
+                    );
+                })
+            )}
+            {connectButton}
+            {sessionCodeBadge && (
+                <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                    {sessionCodeBadge}
+                </div>
+            )}
         </header>
     );
 }
