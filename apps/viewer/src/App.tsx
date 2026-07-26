@@ -666,9 +666,11 @@ function DjRosterHeader({
                             />
                         ) : null;
                     })()}
-                    <span className="text-xl font-semibold text-gray-300 md:text-3xl">
-                        {entries[0]![1].djName}
-                    </span>
+                    {!(entries[0]![1].djImage ?? djLogoSrc) && (
+                        <span className="text-xl font-semibold text-gray-300 md:text-3xl">
+                            {entries[0]![1].djName}
+                        </span>
+                    )}
                 </>
             ) : (
                 entries.map(([id, info]) => {
@@ -682,14 +684,15 @@ function DjRosterHeader({
                                 : "border-b-4 border-transparent text-gray-500"
                                 }`}
                         >
-                            {logoSrc && (
+                            {logoSrc ? (
                                 <img
                                     src={logoSrc.startsWith("data:") ? logoSrc : (resolveImageSrc(logoSrc, "") ?? "")}
                                     alt="DJ Logo"
                                     className="h-8 w-8 rounded-full object-cover md:h-10 md:w-10"
                                 />
+                            ) : (
+                                info.djName
                             )}
-                            {info.djName}
                         </span>
                     );
                 })
