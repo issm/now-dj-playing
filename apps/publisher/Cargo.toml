@@ -1,6 +1,6 @@
 [package]
 name = "ndp-publish"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 description = "楽曲ファイルからタグ・アートワークを抽出し、共有ディレクトリまたは ndp-server に送信する CLI ツール"
 
