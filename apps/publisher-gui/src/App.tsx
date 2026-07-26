@@ -1,13 +1,14 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open } from "@tauri-apps/plugin-dialog";
 
-type Mode = "web" | "local";
+type Tab = "base" | "web" | "local";
 type PublishStatus = "idle" | "success" | "error";
 
 interface Config {
   dj_name: string;
+  dj_image: string | null;
   local: { dj_id: string; publish_base_dir: string };
   web: { endpoint_url: string };
 }
@@ -18,13 +19,19 @@ interface PublishResult {
   artwork: string | null;
 }
 
+/** 画像ファイル拡張子の判定 */
+function isImageFile(path: string): boolean {
+  const ext = path.split(".").pop()?.toLowerCase() ?? "";
+  return ["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"].includes(ext);
+}
+
 /** 入力値の OK/NG に応じたボーダー色を返す */
 function inputBorder(valid: boolean): string {
   return valid ? "border-green-600" : "border-red-600";
 }
 
 function App() {
-  const [mode, setMode] = useState<Mode>("web");
+  const [tab, setTab] = useState<Tab>("base");
   const [isDragOver, setIsDragOver] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -39,6 +46,8 @@ function App() {
 
   // 共通
   const [djName, setDjName] = useState("");
+  const [djImage, setDjImage] = useState<string | null>(null);
+  const [djImageDataUri, setDjImageDataUri] = useState<string | null>(null);
 
   // web モード
   const [endpointUrl, setEndpointUrl] = useState("");
@@ -52,11 +61,18 @@ function App() {
   // バージョン情報
   const [versionInfo, setVersionInfo] = useState<{ gui: string } | null>(null);
 
+  // タブの最新値を ref で保持（ドロップイベントコールバックで参照するため）
+  const tabRef = useRef<Tab>(tab);
+  useEffect(() => {
+    tabRef.current = tab;
+  }, [tab]);
+
   // 起動時に config とバージョンを読み込み
   useEffect(() => {
     invoke<Config>("load_config")
       .then((config) => {
         if (config.dj_name) setDjName(config.dj_name);
+        if (config.dj_image) setDjImage(config.dj_image);
         if (config.local?.dj_id) setDjId(config.local.dj_id);
         if (config.local?.publish_base_dir)
           setPublishBaseDir(config.local.publish_base_dir);
@@ -80,11 +96,23 @@ function App() {
     }
   }, [publishBaseDir]);
 
-  // Tauri ドロップイベントの登録
+  // dj_image パスから Data URI を取得
+  useEffect(() => {
+    if (djImage) {
+      invoke<string>("read_image_as_data_uri", { path: djImage })
+        .then(setDjImageDataUri)
+        .catch(() => setDjImageDataUri(null));
+    } else {
+      setDjImageDataUri(null);
+    }
+  }, [djImage]);
+
+  // publish 実行
   const doPublish = useCallback(
     async (filePath: string) => {
       setPublishStatus("idle");
       setPublishError("");
+      const mode = tabRef.current === "base" ? "web" : tabRef.current;
       try {
         const result = await invoke<PublishResult>("publish", {
           filePath,
@@ -102,9 +130,10 @@ function App() {
         setPublishError(String(err));
       }
     },
-    [mode, djName, endpointUrl, code, djId, publishBaseDir],
+    [djName, endpointUrl, code, djId, publishBaseDir],
   );
 
+  // Tauri ドロップイベント: タブに応じて振り分け
   useEffect(() => {
     const unlisten = getCurrentWebview().onDragDropEvent((event) => {
       if (event.payload.type === "over") {
@@ -113,7 +142,16 @@ function App() {
         setIsDragOver(false);
         const paths = event.payload.paths;
         if (paths.length > 0) {
-          doPublish(paths[0]);
+          const droppedPath = paths[0];
+          if (tabRef.current === "base") {
+            // 基本タブ: 画像ファイルなら dj_image にセット
+            if (isImageFile(droppedPath)) {
+              setDjImage(droppedPath);
+            }
+          } else {
+            // web/local タブ: publish
+            doPublish(droppedPath);
+          }
         }
       } else {
         setIsDragOver(false);
@@ -152,6 +190,7 @@ function App() {
     try {
       const config = await invoke<Config>("load_config");
       if (config.dj_name) setDjName(config.dj_name);
+      setDjImage(config.dj_image ?? null);
       if (config.local?.dj_id) setDjId(config.local.dj_id);
       if (config.local?.publish_base_dir)
         setPublishBaseDir(config.local.publish_base_dir);
@@ -163,6 +202,7 @@ function App() {
     try {
       await invoke("save_config", {
         djName,
+        djImage: djImage || null,
         djId,
         publishBaseDir,
         endpointUrl,
@@ -176,22 +216,33 @@ function App() {
     } catch { }
   };
 
+  const handleClearDjImage = () => {
+    setDjImage(null);
+    setDjImageDataUri(null);
+  };
+
   // web モードで join 済みの場合、入力を無効化
-  const webInputDisabled = mode === "web" && joined;
+  const webInputDisabled = tab === "web" && joined;
 
   return (
     <div className="flex flex-col h-screen p-3 gap-2 text-sm">
-      {/* モードタブ + メニュー */}
+      {/* タブ + メニュー */}
       <div className="flex gap-1">
         <button
-          className={`flex-1 py-1 rounded text-xs font-bold ${mode === "web" ? "bg-blue-600" : "bg-gray-700"}`}
-          onClick={() => setMode("web")}
+          className={`flex-1 py-1 rounded text-xs font-bold ${tab === "base" ? "bg-blue-600" : "bg-gray-700"}`}
+          onClick={() => setTab("base")}
+        >
+          基本
+        </button>
+        <button
+          className={`flex-1 py-1 rounded text-xs font-bold ${tab === "web" ? "bg-purple-600" : "bg-gray-700"}`}
+          onClick={() => setTab("web")}
         >
           web
         </button>
         <button
-          className={`flex-1 py-1 rounded text-xs font-bold ${mode === "local" ? "bg-blue-600" : "bg-gray-700"}`}
-          onClick={() => setMode("local")}
+          className={`flex-1 py-1 rounded text-xs font-bold ${tab === "local" ? "bg-purple-600" : "bg-gray-700"}`}
+          onClick={() => setTab("local")}
         >
           local
         </button>
@@ -229,19 +280,54 @@ function App() {
         </div>
       </div>
 
-      {/* DJ 名 */}
-      <div className="flex items-center gap-2">
-        <label className="shrink-0 text-xs text-gray-400">DJ 名</label>
-        <input
-          className={`flex-1 bg-gray-800 border rounded px-2 py-1 text-xs ${inputBorder(djName.length > 0)} ${webInputDisabled ? "opacity-50" : ""}`}
-          value={djName}
-          onChange={(e) => setDjName(e.target.value)}
-          disabled={webInputDisabled}
-        />
-      </div>
+      {/* タブコンテンツ */}
+      {tab === "base" && (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <label className="text-xs text-gray-400">DJ 名</label>
+            {djImage && (
+              <button
+                className="text-[10px] text-red-400 hover:text-red-300"
+                onClick={handleClearDjImage}
+              >
+                画像クリア
+              </button>
+            )}
+          </div>
+          <input
+            className={`w-full bg-gray-800 border rounded px-2 py-1 text-xs ${inputBorder(djName.length > 0)}`}
+            value={djName}
+            onChange={(e) => setDjName(e.target.value)}
+          />
+          <div
+            className={`flex items-center justify-center border-2 border-dashed rounded-lg h-24 transition-colors ${isDragOver && tab === "base"
+              ? "border-blue-400 bg-blue-900/30"
+              : djImage
+                ? "border-green-600 bg-gray-800/50"
+                : "border-gray-600 bg-gray-800/50"
+              }`}
+          >
+            {djImage ? (
+              <img
+                src={djImageDataUri ?? ""}
+                alt="DJ 画像"
+                className="max-h-20 max-w-full object-contain rounded"
+              />
+            ) : (
+              <span className="text-gray-500 text-xs">
+                画像をドロップ
+              </span>
+            )}
+          </div>
+          {djImage && (
+            <p className="text-[10px] text-gray-500 truncate" title={djImage}>
+              {djImage}
+            </p>
+          )}
+        </div>
+      )}
 
-      {/* モード設定 */}
-      {mode === "web" ? (
+      {tab === "web" && (
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-2">
             <label className="shrink-0 text-xs text-gray-400">エンドポイント</label>
@@ -281,7 +367,9 @@ function App() {
             )}
           </div>
         </div>
-      ) : (
+      )}
+
+      {tab === "local" && (
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-2">
             <label className="shrink-0 text-xs text-gray-400">DJ ID</label>
@@ -312,55 +400,61 @@ function App() {
         </div>
       )}
 
-      {/* ドロップ領域 */}
-      <div
-        className={`relative flex-1 flex flex-col items-center justify-center border-2 border-dashed rounded-lg transition-colors overflow-hidden ${isDragOver
-          ? "border-blue-400 bg-blue-900/30"
-          : publishStatus === "success"
-            ? "border-green-500 bg-gray-800/50"
-            : publishStatus === "error"
-              ? "border-red-500 bg-gray-800/50"
-              : "border-gray-600 bg-gray-800/50"
-          }`}
-      >
-        {/* アートワーク背景 */}
-        {lastTrack?.artwork && (
+      {/* ドロップ領域 (web/local タブのみ) */}
+      {tab !== "base" && (
+        <>
           <div
-            className="absolute inset-0 bg-cover bg-center opacity-30"
-            style={{ backgroundImage: `url(${lastTrack.artwork})` }}
-          />
-        )}
+            className={`relative flex-1 flex flex-col items-center justify-center border-2 border-dashed rounded-lg transition-colors overflow-hidden ${isDragOver
+              ? "border-blue-400 bg-blue-900/30"
+              : publishStatus === "success"
+                ? "border-green-500 bg-gray-800/50"
+                : publishStatus === "error"
+                  ? "border-red-500 bg-gray-800/50"
+                  : "border-gray-600 bg-gray-800/50"
+              }`}
+          >
+            {/* アートワーク背景 */}
+            {lastTrack?.artwork && (
+              <div
+                className="absolute inset-0 bg-cover bg-center opacity-30"
+                style={{ backgroundImage: `url(${lastTrack.artwork})` }}
+              />
+            )}
 
-        {/* トラック情報 or プレースホルダー */}
-        {lastTrack ? (
-          <div className="relative z-10 flex flex-col gap-1 justify-end h-full pb-3 px-2 w-full">
-            <p className="text-white text-sm font-bold text-left break-words">
-              {lastTrack.title}
-            </p>
-            <p className="text-gray-300 text-xs text-left break-words">
-              {lastTrack.artist}
-            </p>
+            {/* トラック情報 or プレースホルダー */}
+            {lastTrack ? (
+              <div className="relative z-10 flex flex-col gap-1 justify-end h-full pb-3 px-2 w-full">
+                <p className="text-white text-sm font-bold text-left break-words">
+                  {lastTrack.title}
+                </p>
+                <p className="text-gray-300 text-xs text-left break-words">
+                  {lastTrack.artist}
+                </p>
+              </div>
+            ) : (
+              <span className="text-gray-500 text-xs relative z-10">
+                ここにファイルをドロップ
+              </span>
+            )}
           </div>
-        ) : (
-          <span className="text-gray-500 text-xs relative z-10">
-            ここにファイルをドロップ
-          </span>
+
+          {/* publish エラー時のみメッセージ表示 */}
+          {publishStatus === "error" && publishError && (
+            <p className="text-red-300 text-[10px] truncate max-w-full text-center">
+              {publishError}
+            </p>
+          )}
+        </>
+      )}
+
+      {/* バージョン情報 (常にウィンドウ下部) */}
+      <div className="mt-auto">
+        {versionInfo && (
+          <div className="text-[9px] text-gray-500 text-right leading-tight">
+            <div>Version: {versionInfo.gui}</div>
+          </div>
         )}
       </div>
-
-      {/* publish エラー時のみメッセージ表示 */}
-      {publishStatus === "error" && publishError && (
-        <p className="text-red-300 text-[10px] truncate max-w-full text-center">
-          {publishError}
-        </p>
-      )}
-
-      {/* バージョン情報 */}
-      {versionInfo && (
-        <div className="text-[9px] text-gray-500 text-right leading-tight">
-          <div>Version: {versionInfo.gui}</div>
-        </div>
-      )}
     </div>
   );
 }

@@ -14,6 +14,7 @@ use ndp_publish::web;
 #[derive(Debug, Serialize, Deserialize, Default)]
 struct ConfigResponse {
     dj_name: String,
+    dj_image: Option<String>,
     local: LocalConfigResponse,
     web: WebConfigResponse,
 }
@@ -83,6 +84,16 @@ fn app_adjacent_config_path() -> Option<PathBuf> {
     None
 }
 
+/// 設定ファイルから dj_image を読み取る（raw JSON パース）
+///
+/// AppConfig (ndp-publish クレート) は dj_image を持たないため、
+/// 設定ファイルの JSON を直接パースして取得する。
+fn read_dj_image_from_config(config_path: &Path) -> Option<String> {
+    let content = std::fs::read_to_string(config_path).ok()?;
+    let value: serde_json::Value = serde_json::from_str(&content).ok()?;
+    value.get("dj_image")?.as_str().map(|s| s.to_string())
+}
+
 /// 設定ファイルを読み込む
 ///
 /// ルックアップ優先順:
@@ -100,8 +111,15 @@ fn load_config(state: tauri::State<AppState>) -> Result<ConfigResponse, String> 
         config::load_config(None).map_err(|e| e.to_string())?
     };
 
+    // dj_image は設定ファイルの raw JSON から取得
+    let dj_image = config
+        .config_path
+        .as_ref()
+        .and_then(|p| read_dj_image_from_config(p));
+
     let response = ConfigResponse {
         dj_name: config.dj_name().unwrap_or_default(),
+        dj_image,
         local: LocalConfigResponse {
             dj_id: config.local_dj_id().unwrap_or_else(|| "dj-000".to_string()),
             publish_base_dir: config
@@ -127,6 +145,7 @@ fn load_config(state: tauri::State<AppState>) -> Result<ConfigResponse, String> 
 fn save_config(
     state: tauri::State<AppState>,
     dj_name: String,
+    dj_image: Option<String>,
     dj_id: String,
     publish_base_dir: String,
     endpoint_url: String,
@@ -136,7 +155,7 @@ fn save_config(
         .or_else(app_adjacent_config_path)
         .ok_or("設定ファイルの保存先を特定できません")?;
 
-    let config_content = serde_json::json!({
+    let mut config_content = serde_json::json!({
         "dj_name": dj_name,
         "local": {
             "dj_id": dj_id,
@@ -146,6 +165,11 @@ fn save_config(
             "endpoint_url": endpoint_url
         }
     });
+
+    // dj_image が指定されていれば含める
+    if let Some(ref image_path) = dj_image {
+        config_content["dj_image"] = serde_json::Value::String(image_path.clone());
+    }
 
     let json = serde_json::to_string_pretty(&config_content).map_err(|e| e.to_string())?;
     std::fs::write(&path, json).map_err(|e| format!("保存に失敗: {}", e))?;
@@ -295,6 +319,36 @@ fn check_dir_exists(path: String) -> bool {
     Path::new(&expanded).is_dir()
 }
 
+/// 画像ファイルを読み取り Base64 Data URI を返す
+#[tauri::command]
+fn read_image_as_data_uri(path: String) -> Result<String, String> {
+    let file_path = Path::new(&path);
+    if !file_path.is_file() {
+        return Err(format!("ファイルが見つかりません: {}", path));
+    }
+
+    let ext = file_path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+
+    let mime = match ext.as_str() {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "bmp" => "image/bmp",
+        "svg" => "image/svg+xml",
+        _ => return Err(format!("未対応の画像形式: {}", ext)),
+    };
+
+    let data = std::fs::read(file_path).map_err(|e| format!("読み込みに失敗: {}", e))?;
+    let b64 = base64::engine::general_purpose::STANDARD.encode(&data);
+
+    Ok(format!("data:{};base64,{}", mime, b64))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app = tauri::Builder::default()
@@ -311,6 +365,7 @@ pub fn run() {
             leave_session,
             publish,
             check_dir_exists,
+            read_image_as_data_uri,
             open_config_folder,
             get_version,
         ])
