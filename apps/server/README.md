@@ -25,12 +25,12 @@ now-dj-playing の中継サーバ。publisher から楽曲情報を受信し、S
 
 ### SSE イベント
 
-| イベント名 | トリガー |
-|---|---|
-| `track_changed` | publisher が楽曲情報を publish |
-| `publisher_joined` | publisher がセッションに join |
-| `publisher_left` | publisher がセッションから leave |
-| `heartbeat` | コネクション維持 (30 秒間隔) |
+| イベント名 | トリガー | データ |
+|---|---|---|
+| `track_changed` | publisher が楽曲情報を publish | `{ publisher_id, dj_name, title, artist, album?, comment?, artwork?, updated_at }` |
+| `publisher_joined` | publisher がセッションに join | `{ publisher_id, dj_name, dj_image? }` |
+| `publisher_left` | publisher がセッションから leave | `{ publisher_id, dj_name }` |
+| `heartbeat` | コネクション維持 (30 秒間隔) | — |
 
 ### フロー
 

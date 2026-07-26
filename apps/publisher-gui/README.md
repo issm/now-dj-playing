@@ -15,10 +15,13 @@ now-dj-playing の Publisher GUI アプリ。楽曲ファイルをドラッグ&�
 - 楽曲ファイル (mp3/m4a) のドラッグ&ドロップによる publish
 - セッション join / leave
 - local モード / web モードの切り替え
+- 「基本」タブでの共通設定管理（DJ 名テキスト、DJ 画像）
+- DJ 画像のドラッグ&ドロップ設定・プレビュー表示
+- join 時に DJ 画像を 800x800 リサイズして送信
 - アプリ終了時の自動 leave (ベストエフォート)
 - always-on-top ウィンドウ (320x420)
 - アプリ隣接の設定ファイル自動検出
-- 設定ファイルの GUI 編集・保存
+- 設定ファイルの GUI 編集・保存（`base` 空間形式）
 
 ## セットアップ
 
@@ -58,3 +61,4 @@ cargo tauri build
 
 - [apps/publisher](../publisher/) — CLI 版 publisher (ライブラリクレートを共有)
 - [ADR-0029](../../docs/adr/0029-20260723-publisher-gui.md) — Publisher GUI アプリの設計
+- [ADR-0034](../../docs/adr/0034-20260726-dj-image-web-flow.md) — DJ 画像の全レイヤー対応

@@ -75,7 +75,13 @@ CLI オプションで指定しない値は設定ファイルから読み込ま�
 
 ```jsonc
 {
-  "dj_name": "DJ名",
+  // 基本設定（推奨: base 空間を使用）
+  "base": {
+    "dj_name": "DJ名",
+    "dj_image": "/path/to/dj-logo.png"  // 省略可
+  },
+  // 後方互換: base 未使用時はトップレベルも可
+  // "dj_name": "DJ名",
   "local": {
     "dj_id": "dj-000",
     "publish_base_dir": "~/ndp"
