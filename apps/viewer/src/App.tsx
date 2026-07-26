@@ -25,6 +25,10 @@ function App() {
     const [reloading, setReloading] = useState(false);
     const [eventName, setEventName] = useState<string | null>(null);
     const [showEventName, setShowEventName] = useState(true);
+    /** イベント名編集中フラグ */
+    const [editingEventName, setEditingEventName] = useState(false);
+    /** イベント名編集中の入力値 */
+    const [editingEventNameValue, setEditingEventNameValue] = useState("");
     /** 背景画像設定（null = 機能無効） */
     const [backgroundImageConfig, setBackgroundImageConfig] = useState<BackgroundImageConfig | null>(null);
     /** 現在選択中の背景画像の相対パス（null = なし） */
@@ -215,6 +219,9 @@ function App() {
         if (isMonitor) return;
 
         const handleKeyDown = (e: KeyboardEvent) => {
+            // イベント名編集中は一切無視
+            if (editingEventName) return;
+
             // BackgroundPicker が開いている場合は一切無視（自前でキー処理する）
             if (showBackgroundPicker) return;
 
@@ -261,6 +268,23 @@ function App() {
                             console.error("モニタウィンドウの起動に失敗:", err);
                         });
                     break;
+                case "S": // Shift+S: セッション破棄
+                    if (webSession) {
+                        // SSE 切断
+                        if (webCleanupRef.current) {
+                            webCleanupRef.current();
+                            webCleanupRef.current = null;
+                        }
+                        // サーバー側セッション破棄
+                        destroyWebSession(webSession);
+                        invoke("clear_web_session").catch(() => { });
+                        setWebSession(null);
+                        setSessionCode(null);
+                        setTrack(null);
+                        setRoster(new Map());
+                        setInfoMessage("セッションを破棄しました");
+                    }
+                    break;
                 case "?":
                     setShowShortcuts((prev) => !prev);
                     break;
@@ -271,7 +295,7 @@ function App() {
         };
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [isMonitor, backgroundImageConfig, showBackgroundPicker, showShortcuts]);
+    }, [isMonitor, backgroundImageConfig, showBackgroundPicker, showShortcuts, editingEventName, webSession]);
 
     useEffect(() => {
         if (isMonitor) {
@@ -372,7 +396,7 @@ function App() {
                     <span>{infoMessage}</span>
                     <button
                         onClick={dismissInfo}
-                        className="ml-4 text-green-300 hover:text-white"
+                        className="ml-4 cursor-pointer text-green-300 hover:text-white"
                         aria-label="閉じる"
                     >
                         &times;
@@ -387,7 +411,7 @@ function App() {
                     <button
                         onClick={handleReloadConfig}
                         disabled={reloading}
-                        className="ml-4 shrink-0 rounded bg-red-700 px-3 py-1 text-xs text-red-100 hover:bg-red-600 disabled:opacity-50"
+                        className="ml-4 shrink-0 cursor-pointer rounded bg-red-700 px-3 py-1 text-xs text-red-100 hover:bg-red-600 disabled:opacity-50"
                     >
                         {reloading ? "読込中..." : "再読み込み"}
                     </button>
@@ -398,7 +422,53 @@ function App() {
                 {/* イベント名（track の有無に関わらず表示） */}
                 {showEventName && eventName && (
                     <div className="shrink-0 pt-4 text-center">
-                        <span className="text-sm text-gray-400 md:text-base">{eventName}</span>
+                        {editingEventName ? (
+                            <span className="-mt-1 inline-flex items-center gap-5">
+                                <input
+                                    type="text"
+                                    value={editingEventNameValue}
+                                    onChange={(e) => setEditingEventNameValue(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === "Escape") {
+                                            e.stopPropagation();
+                                            setEditingEventName(false);
+                                        }
+                                    }}
+                                    autoFocus
+                                    className="w-96 rounded border border-gray-600 bg-gray-800 px-2 py-0.5 text-sm text-gray-200 outline-none focus:border-blue-500 md:text-base"
+                                />
+                                <span className="inline-flex gap-3">
+                                    <button
+                                        onClick={() => {
+                                            const trimmed = editingEventNameValue.trim();
+                                            if (trimmed) setEventName(trimmed);
+                                            setEditingEventName(false);
+                                        }}
+                                        className="cursor-pointer text-green-400 hover:text-green-300"
+                                        aria-label="決定"
+                                    >
+                                        ✓
+                                    </button>
+                                    <button
+                                        onClick={() => setEditingEventName(false)}
+                                        className="cursor-pointer text-red-400 hover:text-red-200"
+                                        aria-label="キャンセル"
+                                    >
+                                        ✕
+                                    </button>
+                                </span>
+                            </span>
+                        ) : (
+                            <span
+                                onClick={() => {
+                                    setEditingEventNameValue(eventName ?? "");
+                                    setEditingEventName(true);
+                                }}
+                                className="cursor-pointer text-sm text-gray-400 hover:text-gray-200 md:text-base"
+                            >
+                                {eventName}
+                            </span>
+                        )}
                     </div>
                 )}
 
@@ -407,23 +477,22 @@ function App() {
                     roster={roster}
                     currentDjId={track?.dirName ?? null}
                     djLogoSrc={resolveImageSrc(track?.djLogoPath ?? null, track?.updatedAt ?? "")}
+                    sessionCode={sessionCode}
+                    showConnectButton={appConfig?.mode === "web" && !webSession}
+                    connecting={connecting}
+                    onConnect={handleConnect}
                 />
 
                 <div className={`flex min-h-0 flex-1 w-full flex-col items-center ${track ? "justify-center" : "justify-start"}`}>
                     {track ? (
                         <TrackBody track={track} showComments={showComments} showTags={showTags} />
                     ) : (
-                        <WaitingScreen
-                            sessionCode={sessionCode}
-                            showConnectButton={appConfig?.mode === "web" && !webSession}
-                            connecting={connecting}
-                            onConnect={handleConnect}
-                        />
+                        <WaitingScreen />
                     )}
                 </div>
             </div>
 
-            {showShortcuts && <ShortcutOverlay sessionCode={sessionCode} onClose={() => setShowShortcuts(false)} />}
+            {showShortcuts && <ShortcutOverlay onClose={() => setShowShortcuts(false)} />}
 
             {showBackgroundPicker && (
                 <BackgroundPicker
@@ -447,13 +516,14 @@ function VersionDisplay() {
     );
 }
 
-function ShortcutOverlay({ sessionCode, onClose }: { sessionCode: string | null; onClose: () => void }) {
+function ShortcutOverlay({ onClose }: { onClose: () => void }) {
     const shortcuts = [
         { key: "r", description: "設定ファイルの再読み込み" },
         { key: "b", description: "背景画像の選択" },
         { key: "c", description: "コメント表示のトグル" },
         { key: "t", description: "タグ表示のトグル" },
         { key: "e", description: "イベント名表示のトグル" },
+        { key: "Shift + s", description: "セッションの破棄" },
         { key: "m", description: "モニタウィンドウを開く" },
         { key: "?", description: "ショートカット一覧の表示" },
         { key: "Esc", description: "オーバーレイを閉じる" },
@@ -479,51 +549,18 @@ function ShortcutOverlay({ sessionCode, onClose }: { sessionCode: string | null;
                         </li>
                     ))}
                 </ul>
-                {sessionCode && (
-                    <div className="mt-4 border-t border-gray-700 pt-4">
-                        <p className="flex items-center justify-between">
-                            <span className="text-gray-300">認証コード</span>
-                            <span className="rounded bg-gray-700 px-2 py-0.5 font-mono text-sm text-yellow-300">
-                                {sessionCode}
-                            </span>
-                        </p>
-                    </div>
-                )}
             </div>
         </div>
     );
 }
 
-function WaitingScreen({
-    sessionCode,
-    showConnectButton,
-    connecting,
-    onConnect,
-}: {
-    sessionCode: string | null;
-    showConnectButton: boolean;
-    connecting: boolean;
-    onConnect: () => void;
-}) {
+function WaitingScreen() {
     return (
         <div className="pt-48 text-center">
             <h1 className="text-4xl font-bold">now-dj-playing</h1>
-            {showConnectButton ? (
-                <button
-                    onClick={onConnect}
-                    disabled={connecting}
-                    className="mt-6 rounded bg-green-600 px-3 py-1 text-base font-semibold text-white hover:bg-green-500 disabled:opacity-50"
-                >
-                    {connecting ? "接続中..." : "Connect"}
-                </button>
-            ) : (
-                <p className="mt-4 text-lg text-gray-400">
-                    トラック情報を待機中...
-                    {sessionCode && (
-                        <span className="ml-2 font-mono text-gray-500">({sessionCode})</span>
-                    )}
-                </p>
-            )}
+            <p className="mt-4 text-lg text-gray-400">
+                トラック情報を待機中...
+            </p>
         </div>
     );
 }
@@ -566,55 +603,86 @@ function DjRosterHeader({
     roster,
     currentDjId,
     djLogoSrc,
+    sessionCode,
+    showConnectButton,
+    connecting,
+    onConnect,
 }: {
     roster: Map<string, string>;
     currentDjId: string | null;
     djLogoSrc: string | null;
+    sessionCode: string | null;
+    showConnectButton: boolean;
+    connecting: boolean;
+    onConnect: () => void;
 }) {
     const entries = Array.from(roster.entries());
 
-    // n <= 1: 従来通りの単一表示（ハイライトなし）
-    // ロスターが空の場合も高さを確保するため、常にヘッダ自体は表示する
-    if (entries.length <= 1) {
-        const displayName = entries[0]?.[1] ?? null;
+    // 右端に表示する認証コード or Connect ボタン
+    const connectButton = showConnectButton ? (
+        <button
+            onClick={onConnect}
+            disabled={connecting}
+            className="cursor-pointer rounded bg-green-600 px-3 py-1 text-base font-semibold text-white hover:bg-green-500 disabled:opacity-50"
+        >
+            {connecting ? "接続中..." : "Connect"}
+        </button>
+    ) : null;
 
+    const sessionCodeBadge = !showConnectButton && sessionCode ? (
+        <span className="font-mono text-base text-yellow-300/80">
+            {sessionCode}
+        </span>
+    ) : null;
+
+    // n == 0: ロスターが空（Connect ボタン / 認証コードは中央表示）
+    if (entries.length === 0) {
         return (
-            <header className="flex h-[100px] shrink-0 items-center justify-center gap-3 px-8">
-                {displayName && (
-                    <>
-                        {djLogoSrc ? (
-                            <img
-                                src={djLogoSrc}
-                                alt="DJ Logo"
-                                className="h-10 w-10 rounded-full object-cover md:h-12 md:w-12"
-                            />
-                        ) : null}
-                        <span className="text-xl font-semibold text-gray-300 md:text-3xl">
-                            {displayName}
-                        </span>
-                    </>
-                )}
+            <header className="relative flex h-[100px] shrink-0 items-center justify-center gap-3 px-8">
+                {connectButton}
+                {sessionCodeBadge}
             </header>
         );
     }
 
-    // n >= 2: 横並び表示 + 現在の DJ をハイライト
+    // n >= 1: 横並び表示 + 現在の DJ をハイライト + 認証コードは右端
     return (
-        <header className="flex h-[100px] shrink-0 flex-wrap items-center justify-center gap-x-8 gap-y-1 px-8">
-            {entries.map(([id, name]) => {
-                const isCurrent = id === currentDjId;
-                return (
-                    <span
-                        key={id}
-                        className={`px-2 text-xl font-semibold md:text-3xl ${isCurrent
-                            ? "border-b-4 border-yellow-500 text-white"
-                            : "border-b-4 border-transparent text-gray-500"
-                            }`}
-                    >
-                        {name}
+        <header className="relative flex h-[100px] shrink-0 flex-wrap items-center justify-center gap-x-8 gap-y-1 px-8">
+            {entries.length === 1 ? (
+                <>
+                    {djLogoSrc ? (
+                        <img
+                            src={djLogoSrc}
+                            alt="DJ Logo"
+                            className="h-10 w-10 rounded-full object-cover md:h-12 md:w-12"
+                        />
+                    ) : null}
+                    <span className="text-xl font-semibold text-gray-300 md:text-3xl">
+                        {entries[0]![1]}
                     </span>
-                );
-            })}
+                </>
+            ) : (
+                entries.map(([id, name]) => {
+                    const isCurrent = id === currentDjId;
+                    return (
+                        <span
+                            key={id}
+                            className={`px-2 text-xl font-semibold md:text-3xl ${isCurrent
+                                ? "border-b-4 border-yellow-500 text-white"
+                                : "border-b-4 border-transparent text-gray-500"
+                                }`}
+                        >
+                            {name}
+                        </span>
+                    );
+                })
+            )}
+            {connectButton}
+            {sessionCodeBadge && (
+                <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                    {sessionCodeBadge}
+                </div>
+            )}
         </header>
     );
 }
