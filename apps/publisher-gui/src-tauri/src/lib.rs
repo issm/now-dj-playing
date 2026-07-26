@@ -14,6 +14,7 @@ use ndp_publish::web;
 #[derive(Debug, Serialize, Deserialize, Default)]
 struct ConfigResponse {
     dj_name: String,
+    dj_image: Option<String>,
     local: LocalConfigResponse,
     web: WebConfigResponse,
 }
@@ -83,6 +84,16 @@ fn app_adjacent_config_path() -> Option<PathBuf> {
     None
 }
 
+/// 設定ファイルから dj_image を読み取る（raw JSON パース）
+///
+/// AppConfig (ndp-publish クレート) は dj_image を持たないため、
+/// 設定ファイルの JSON を直接パースして取得する。
+fn read_dj_image_from_config(config_path: &Path) -> Option<String> {
+    let content = std::fs::read_to_string(config_path).ok()?;
+    let value: serde_json::Value = serde_json::from_str(&content).ok()?;
+    value.get("dj_image")?.as_str().map(|s| s.to_string())
+}
+
 /// 設定ファイルを読み込む
 ///
 /// ルックアップ優先順:
@@ -100,8 +111,15 @@ fn load_config(state: tauri::State<AppState>) -> Result<ConfigResponse, String> 
         config::load_config(None).map_err(|e| e.to_string())?
     };
 
+    // dj_image は設定ファイルの raw JSON から取得
+    let dj_image = config
+        .config_path
+        .as_ref()
+        .and_then(|p| read_dj_image_from_config(p));
+
     let response = ConfigResponse {
         dj_name: config.dj_name().unwrap_or_default(),
+        dj_image,
         local: LocalConfigResponse {
             dj_id: config.local_dj_id().unwrap_or_else(|| "dj-000".to_string()),
             publish_base_dir: config
@@ -127,6 +145,7 @@ fn load_config(state: tauri::State<AppState>) -> Result<ConfigResponse, String> 
 fn save_config(
     state: tauri::State<AppState>,
     dj_name: String,
+    dj_image: Option<String>,
     dj_id: String,
     publish_base_dir: String,
     endpoint_url: String,
@@ -136,7 +155,7 @@ fn save_config(
         .or_else(app_adjacent_config_path)
         .ok_or("設定ファイルの保存先を特定できません")?;
 
-    let config_content = serde_json::json!({
+    let mut config_content = serde_json::json!({
         "dj_name": dj_name,
         "local": {
             "dj_id": dj_id,
@@ -146,6 +165,11 @@ fn save_config(
             "endpoint_url": endpoint_url
         }
     });
+
+    // dj_image が指定されていれば含める
+    if let Some(ref image_path) = dj_image {
+        config_content["dj_image"] = serde_json::Value::String(image_path.clone());
+    }
 
     let json = serde_json::to_string_pretty(&config_content).map_err(|e| e.to_string())?;
     std::fs::write(&path, json).map_err(|e| format!("保存に失敗: {}", e))?;

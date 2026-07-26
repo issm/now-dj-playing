@@ -1,13 +1,15 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open } from "@tauri-apps/plugin-dialog";
+import { convertFileSrc } from "@tauri-apps/api/core";
 
 type Tab = "base" | "web" | "local";
 type PublishStatus = "idle" | "success" | "error";
 
 interface Config {
   dj_name: string;
+  dj_image: string | null;
   local: { dj_id: string; publish_base_dir: string };
   web: { endpoint_url: string };
 }
@@ -16,6 +18,12 @@ interface PublishResult {
   title: string;
   artist: string;
   artwork: string | null;
+}
+
+/** 画像ファイル拡張子の判定 */
+function isImageFile(path: string): boolean {
+  const ext = path.split(".").pop()?.toLowerCase() ?? "";
+  return ["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"].includes(ext);
 }
 
 /** 入力値の OK/NG に応じたボーダー色を返す */
@@ -39,6 +47,7 @@ function App() {
 
   // 共通
   const [djName, setDjName] = useState("");
+  const [djImage, setDjImage] = useState<string | null>(null);
 
   // web モード
   const [endpointUrl, setEndpointUrl] = useState("");
@@ -52,11 +61,18 @@ function App() {
   // バージョン情報
   const [versionInfo, setVersionInfo] = useState<{ gui: string } | null>(null);
 
+  // タブの最新値を ref で保持（ドロップイベントコールバックで参照するため）
+  const tabRef = useRef<Tab>(tab);
+  useEffect(() => {
+    tabRef.current = tab;
+  }, [tab]);
+
   // 起動時に config とバージョンを読み込み
   useEffect(() => {
     invoke<Config>("load_config")
       .then((config) => {
         if (config.dj_name) setDjName(config.dj_name);
+        if (config.dj_image) setDjImage(config.dj_image);
         if (config.local?.dj_id) setDjId(config.local.dj_id);
         if (config.local?.publish_base_dir)
           setPublishBaseDir(config.local.publish_base_dir);
@@ -80,13 +96,12 @@ function App() {
     }
   }, [publishBaseDir]);
 
-  // Tauri ドロップイベントの登録
+  // publish 実行
   const doPublish = useCallback(
     async (filePath: string) => {
       setPublishStatus("idle");
       setPublishError("");
-      // publish モードは web/local タブ選択に基づく（基本タブ時は直近のモードに依存しないよう web をデフォルト）
-      const mode = tab === "base" ? "web" : tab;
+      const mode = tabRef.current === "base" ? "web" : tabRef.current;
       try {
         const result = await invoke<PublishResult>("publish", {
           filePath,
@@ -104,9 +119,10 @@ function App() {
         setPublishError(String(err));
       }
     },
-    [tab, djName, endpointUrl, code, djId, publishBaseDir],
+    [djName, endpointUrl, code, djId, publishBaseDir],
   );
 
+  // Tauri ドロップイベント: タブに応じて振り分け
   useEffect(() => {
     const unlisten = getCurrentWebview().onDragDropEvent((event) => {
       if (event.payload.type === "over") {
@@ -115,7 +131,16 @@ function App() {
         setIsDragOver(false);
         const paths = event.payload.paths;
         if (paths.length > 0) {
-          doPublish(paths[0]);
+          const droppedPath = paths[0];
+          if (tabRef.current === "base") {
+            // 基本タブ: 画像ファイルなら dj_image にセット
+            if (isImageFile(droppedPath)) {
+              setDjImage(droppedPath);
+            }
+          } else {
+            // web/local タブ: publish
+            doPublish(droppedPath);
+          }
         }
       } else {
         setIsDragOver(false);
@@ -154,6 +179,7 @@ function App() {
     try {
       const config = await invoke<Config>("load_config");
       if (config.dj_name) setDjName(config.dj_name);
+      setDjImage(config.dj_image ?? null);
       if (config.local?.dj_id) setDjId(config.local.dj_id);
       if (config.local?.publish_base_dir)
         setPublishBaseDir(config.local.publish_base_dir);
@@ -165,6 +191,7 @@ function App() {
     try {
       await invoke("save_config", {
         djName,
+        djImage: djImage || null,
         djId,
         publishBaseDir,
         endpointUrl,
@@ -176,6 +203,10 @@ function App() {
     try {
       await invoke("open_config_folder");
     } catch { }
+  };
+
+  const handleClearDjImage = () => {
+    setDjImage(null);
   };
 
   // web モードで join 済みの場合、入力を無効化
@@ -239,7 +270,7 @@ function App() {
 
       {/* タブコンテンツ */}
       {tab === "base" && (
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col gap-2">
           <div className="flex items-center gap-2">
             <label className="shrink-0 text-xs text-gray-400">DJ 名</label>
             <input
@@ -247,6 +278,46 @@ function App() {
               value={djName}
               onChange={(e) => setDjName(e.target.value)}
             />
+          </div>
+
+          {/* DJ 画像 */}
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center justify-between">
+              <label className="text-xs text-gray-400">DJ 画像</label>
+              {djImage && (
+                <button
+                  className="text-[10px] text-red-400 hover:text-red-300"
+                  onClick={handleClearDjImage}
+                >
+                  クリア
+                </button>
+              )}
+            </div>
+            <div
+              className={`flex items-center justify-center border-2 border-dashed rounded-lg h-24 transition-colors ${isDragOver && tab === "base"
+                ? "border-blue-400 bg-blue-900/30"
+                : djImage
+                  ? "border-green-600 bg-gray-800/50"
+                  : "border-gray-600 bg-gray-800/50"
+                }`}
+            >
+              {djImage ? (
+                <img
+                  src={convertFileSrc(djImage)}
+                  alt="DJ 画像"
+                  className="max-h-20 max-w-full object-contain rounded"
+                />
+              ) : (
+                <span className="text-gray-500 text-xs">
+                  画像をドロップ
+                </span>
+              )}
+            </div>
+            {djImage && (
+              <p className="text-[10px] text-gray-500 truncate" title={djImage}>
+                {djImage}
+              </p>
+            )}
           </div>
         </div>
       )}
