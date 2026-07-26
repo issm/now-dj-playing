@@ -295,7 +295,7 @@ function App() {
         };
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [isMonitor, backgroundImageConfig, showBackgroundPicker, showShortcuts, editingEventName]);
+    }, [isMonitor, backgroundImageConfig, showBackgroundPicker, showShortcuts, editingEventName, webSession]);
 
     useEffect(() => {
         if (isMonitor) {
