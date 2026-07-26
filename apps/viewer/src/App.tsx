@@ -633,7 +633,7 @@ function DjRosterHeader({
         <button
             onClick={onConnect}
             disabled={connecting}
-            className="cursor-pointer rounded bg-green-600 px-2 py-0.5 text-sm font-semibold text-white hover:bg-green-500 disabled:opacity-50"
+            className="cursor-pointer rounded bg-green-600 px-3 py-1 text-base font-semibold text-white hover:bg-green-500 disabled:opacity-50"
         >
             {connecting ? "接続中..." : "Connect"}
         </button>
