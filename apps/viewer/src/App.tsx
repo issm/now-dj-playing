@@ -662,7 +662,7 @@ function DjRosterHeader({
                             <img
                                 src={imgSrc}
                                 alt="DJ Logo"
-                                className="h-10 w-10 rounded-full object-cover md:h-12 md:w-12"
+                                className="h-full max-h-[80px] w-auto object-contain"
                             />
                         ) : null;
                     })()}
@@ -688,7 +688,7 @@ function DjRosterHeader({
                                 <img
                                     src={logoSrc.startsWith("data:") ? logoSrc : (resolveImageSrc(logoSrc, "") ?? "")}
                                     alt="DJ Logo"
-                                    className="h-8 w-8 rounded-full object-cover md:h-10 md:w-10"
+                                    className="h-full max-h-[60px] w-auto object-contain"
                                 />
                             ) : (
                                 info.djName
