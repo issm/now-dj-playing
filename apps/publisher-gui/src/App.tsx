@@ -166,7 +166,7 @@ function App() {
   const handleJoin = async () => {
     setJoinFailed(false);
     try {
-      await invoke("join_session", { endpointUrl, code, djName });
+      await invoke("join_session", { endpointUrl, code, djName, djImage: djImage || null });
       setJoined(true);
     } catch (_) {
       setJoinFailed(true);

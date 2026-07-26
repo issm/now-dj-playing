@@ -172,6 +172,7 @@ fn join_session(
     endpoint_url: String,
     code: String,
     dj_name: String,
+    dj_image: Option<String>,
 ) -> Result<(), String> {
     let config_guard = state.config.lock().unwrap();
     let config = config_guard.as_ref().ok_or("設定が読み込まれていません")?;
@@ -180,7 +181,10 @@ fn join_session(
         std::env::set_var("NDP_PUBLISH_ENDPOINT_URL", &endpoint_url);
     }
 
-    web::join_only(config, &dj_name, Some(&code)).map_err(|e| e.to_string())
+    let dj_image_path = dj_image.map(|p| PathBuf::from(p));
+
+    web::join_only(config, &dj_name, Some(&code), dj_image_path.as_deref())
+        .map_err(|e| e.to_string())
 }
 
 /// セッションから離脱する (web モード)

@@ -77,7 +77,7 @@ fn main() -> Result<()> {
         } else if cli.join_only {
             // -J: join のみ実行して終了
             let dj_name = require_dj_name(&cli, &config)?;
-            web::join_only(&config, &dj_name, cli.code.as_deref())?;
+            web::join_only(&config, &dj_name, cli.code.as_deref(), None)?;
         } else {
             // 通常の web publish
             let dj_name = require_dj_name(&cli, &config)?;

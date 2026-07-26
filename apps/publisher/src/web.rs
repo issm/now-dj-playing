@@ -106,7 +106,14 @@ pub fn leave(config: &AppConfig) -> Result<()> {
 }
 
 /// join のみ実行して終了する (-J, --join-only)
-pub fn join_only(config: &AppConfig, dj_name: &str, code: Option<&str>) -> Result<()> {
+///
+/// `dj_image_override` が指定された場合、config の dj_image_path() よりも優先する。
+pub fn join_only(
+    config: &AppConfig,
+    dj_name: &str,
+    code: Option<&str>,
+    dj_image_override: Option<&Path>,
+) -> Result<()> {
     let endpoint_url = config.web_endpoint_url().ok_or_else(|| {
         anyhow::anyhow!(
             "エンドポイント URL が未指定です。設定ファイルの web.endpoint_url を設定してください"
@@ -123,8 +130,16 @@ pub fn join_only(config: &AppConfig, dj_name: &str, code: Option<&str>) -> Resul
         anyhow::anyhow!("セッションコードが必要です。-C で 6 桁コードを指定してください")
     })?;
 
-    // dj_image を読み込み・リサイズ
-    let dj_image_data_uri = load_dj_image_data_uri(config)?;
+    // dj_image を読み込み・リサイズ（override 優先）
+    let dj_image_data_uri = if let Some(override_path) = dj_image_override {
+        if override_path.is_file() {
+            Some(resize_and_encode_image_file(override_path)?)
+        } else {
+            None
+        }
+    } else {
+        load_dj_image_data_uri(config)?
+    };
 
     let session = do_join(&endpoint_url, dj_name, code, dj_image_data_uri.as_deref())?;
     save_session_file(&session_path, &session)?;
