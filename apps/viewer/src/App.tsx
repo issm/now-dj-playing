@@ -261,6 +261,23 @@ function App() {
                             console.error("モニタウィンドウの起動に失敗:", err);
                         });
                     break;
+                case "S": // Shift+S: セッション破棄
+                    if (webSession) {
+                        // SSE 切断
+                        if (webCleanupRef.current) {
+                            webCleanupRef.current();
+                            webCleanupRef.current = null;
+                        }
+                        // サーバー側セッション破棄
+                        destroyWebSession(webSession);
+                        invoke("clear_web_session").catch(() => { });
+                        setWebSession(null);
+                        setSessionCode(null);
+                        setTrack(null);
+                        setRoster(new Map());
+                        setInfoMessage("セッションを破棄しました");
+                    }
+                    break;
                 case "?":
                     setShowShortcuts((prev) => !prev);
                     break;
@@ -454,6 +471,7 @@ function ShortcutOverlay({ sessionCode, onClose }: { sessionCode: string | null;
         { key: "c", description: "コメント表示のトグル" },
         { key: "t", description: "タグ表示のトグル" },
         { key: "e", description: "イベント名表示のトグル" },
+        { key: "Shift + s", description: "セッションの破棄" },
         { key: "m", description: "モニタウィンドウを開く" },
         { key: "?", description: "ショートカット一覧の表示" },
         { key: "Esc", description: "オーバーレイを閉じる" },
