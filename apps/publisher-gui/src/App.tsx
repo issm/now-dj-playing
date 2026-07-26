@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open } from "@tauri-apps/plugin-dialog";
 
-type Mode = "web" | "local";
+type Tab = "base" | "web" | "local";
 type PublishStatus = "idle" | "success" | "error";
 
 interface Config {
@@ -24,7 +24,7 @@ function inputBorder(valid: boolean): string {
 }
 
 function App() {
-  const [mode, setMode] = useState<Mode>("web");
+  const [tab, setTab] = useState<Tab>("base");
   const [isDragOver, setIsDragOver] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -85,6 +85,8 @@ function App() {
     async (filePath: string) => {
       setPublishStatus("idle");
       setPublishError("");
+      // publish モードは web/local タブ選択に基づく（基本タブ時は直近のモードに依存しないよう web をデフォルト）
+      const mode = tab === "base" ? "web" : tab;
       try {
         const result = await invoke<PublishResult>("publish", {
           filePath,
@@ -102,7 +104,7 @@ function App() {
         setPublishError(String(err));
       }
     },
-    [mode, djName, endpointUrl, code, djId, publishBaseDir],
+    [tab, djName, endpointUrl, code, djId, publishBaseDir],
   );
 
   useEffect(() => {
@@ -177,21 +179,27 @@ function App() {
   };
 
   // web モードで join 済みの場合、入力を無効化
-  const webInputDisabled = mode === "web" && joined;
+  const webInputDisabled = tab === "web" && joined;
 
   return (
     <div className="flex flex-col h-screen p-3 gap-2 text-sm">
-      {/* モードタブ + メニュー */}
+      {/* タブ + メニュー */}
       <div className="flex gap-1">
         <button
-          className={`flex-1 py-1 rounded text-xs font-bold ${mode === "web" ? "bg-blue-600" : "bg-gray-700"}`}
-          onClick={() => setMode("web")}
+          className={`flex-1 py-1 rounded text-xs font-bold ${tab === "base" ? "bg-blue-600" : "bg-gray-700"}`}
+          onClick={() => setTab("base")}
+        >
+          基本
+        </button>
+        <button
+          className={`flex-1 py-1 rounded text-xs font-bold ${tab === "web" ? "bg-purple-600" : "bg-gray-700"}`}
+          onClick={() => setTab("web")}
         >
           web
         </button>
         <button
-          className={`flex-1 py-1 rounded text-xs font-bold ${mode === "local" ? "bg-blue-600" : "bg-gray-700"}`}
-          onClick={() => setMode("local")}
+          className={`flex-1 py-1 rounded text-xs font-bold ${tab === "local" ? "bg-purple-600" : "bg-gray-700"}`}
+          onClick={() => setTab("local")}
         >
           local
         </button>
@@ -229,19 +237,21 @@ function App() {
         </div>
       </div>
 
-      {/* DJ 名 */}
-      <div className="flex items-center gap-2">
-        <label className="shrink-0 text-xs text-gray-400">DJ 名</label>
-        <input
-          className={`flex-1 bg-gray-800 border rounded px-2 py-1 text-xs ${inputBorder(djName.length > 0)} ${webInputDisabled ? "opacity-50" : ""}`}
-          value={djName}
-          onChange={(e) => setDjName(e.target.value)}
-          disabled={webInputDisabled}
-        />
-      </div>
+      {/* タブコンテンツ */}
+      {tab === "base" && (
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2">
+            <label className="shrink-0 text-xs text-gray-400">DJ 名</label>
+            <input
+              className={`flex-1 bg-gray-800 border rounded px-2 py-1 text-xs ${inputBorder(djName.length > 0)}`}
+              value={djName}
+              onChange={(e) => setDjName(e.target.value)}
+            />
+          </div>
+        </div>
+      )}
 
-      {/* モード設定 */}
-      {mode === "web" ? (
+      {tab === "web" && (
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-2">
             <label className="shrink-0 text-xs text-gray-400">エンドポイント</label>
@@ -281,7 +291,9 @@ function App() {
             )}
           </div>
         </div>
-      ) : (
+      )}
+
+      {tab === "local" && (
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-2">
             <label className="shrink-0 text-xs text-gray-400">DJ ID</label>
@@ -312,55 +324,61 @@ function App() {
         </div>
       )}
 
-      {/* ドロップ領域 */}
-      <div
-        className={`relative flex-1 flex flex-col items-center justify-center border-2 border-dashed rounded-lg transition-colors overflow-hidden ${isDragOver
-          ? "border-blue-400 bg-blue-900/30"
-          : publishStatus === "success"
-            ? "border-green-500 bg-gray-800/50"
-            : publishStatus === "error"
-              ? "border-red-500 bg-gray-800/50"
-              : "border-gray-600 bg-gray-800/50"
-          }`}
-      >
-        {/* アートワーク背景 */}
-        {lastTrack?.artwork && (
+      {/* ドロップ領域 (web/local タブのみ) */}
+      {tab !== "base" && (
+        <>
           <div
-            className="absolute inset-0 bg-cover bg-center opacity-30"
-            style={{ backgroundImage: `url(${lastTrack.artwork})` }}
-          />
-        )}
+            className={`relative flex-1 flex flex-col items-center justify-center border-2 border-dashed rounded-lg transition-colors overflow-hidden ${isDragOver
+              ? "border-blue-400 bg-blue-900/30"
+              : publishStatus === "success"
+                ? "border-green-500 bg-gray-800/50"
+                : publishStatus === "error"
+                  ? "border-red-500 bg-gray-800/50"
+                  : "border-gray-600 bg-gray-800/50"
+              }`}
+          >
+            {/* アートワーク背景 */}
+            {lastTrack?.artwork && (
+              <div
+                className="absolute inset-0 bg-cover bg-center opacity-30"
+                style={{ backgroundImage: `url(${lastTrack.artwork})` }}
+              />
+            )}
 
-        {/* トラック情報 or プレースホルダー */}
-        {lastTrack ? (
-          <div className="relative z-10 flex flex-col gap-1 justify-end h-full pb-3 px-2 w-full">
-            <p className="text-white text-sm font-bold text-left break-words">
-              {lastTrack.title}
-            </p>
-            <p className="text-gray-300 text-xs text-left break-words">
-              {lastTrack.artist}
-            </p>
+            {/* トラック情報 or プレースホルダー */}
+            {lastTrack ? (
+              <div className="relative z-10 flex flex-col gap-1 justify-end h-full pb-3 px-2 w-full">
+                <p className="text-white text-sm font-bold text-left break-words">
+                  {lastTrack.title}
+                </p>
+                <p className="text-gray-300 text-xs text-left break-words">
+                  {lastTrack.artist}
+                </p>
+              </div>
+            ) : (
+              <span className="text-gray-500 text-xs relative z-10">
+                ここにファイルをドロップ
+              </span>
+            )}
           </div>
-        ) : (
-          <span className="text-gray-500 text-xs relative z-10">
-            ここにファイルをドロップ
-          </span>
+
+          {/* publish エラー時のみメッセージ表示 */}
+          {publishStatus === "error" && publishError && (
+            <p className="text-red-300 text-[10px] truncate max-w-full text-center">
+              {publishError}
+            </p>
+          )}
+        </>
+      )}
+
+      {/* バージョン情報 (常にウィンドウ下部) */}
+      <div className="mt-auto">
+        {versionInfo && (
+          <div className="text-[9px] text-gray-500 text-right leading-tight">
+            <div>Version: {versionInfo.gui}</div>
+          </div>
         )}
       </div>
-
-      {/* publish エラー時のみメッセージ表示 */}
-      {publishStatus === "error" && publishError && (
-        <p className="text-red-300 text-[10px] truncate max-w-full text-center">
-          {publishError}
-        </p>
-      )}
-
-      {/* バージョン情報 */}
-      {versionInfo && (
-        <div className="text-[9px] text-gray-500 text-right leading-tight">
-          <div>Version: {versionInfo.gui}</div>
-        </div>
-      )}
     </div>
   );
 }
