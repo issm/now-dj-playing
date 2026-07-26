@@ -492,7 +492,7 @@ function App() {
                 </div>
             </div>
 
-            {showShortcuts && <ShortcutOverlay sessionCode={sessionCode} onClose={() => setShowShortcuts(false)} />}
+            {showShortcuts && <ShortcutOverlay onClose={() => setShowShortcuts(false)} />}
 
             {showBackgroundPicker && (
                 <BackgroundPicker
@@ -516,7 +516,7 @@ function VersionDisplay() {
     );
 }
 
-function ShortcutOverlay({ sessionCode, onClose }: { sessionCode: string | null; onClose: () => void }) {
+function ShortcutOverlay({ onClose }: { onClose: () => void }) {
     const shortcuts = [
         { key: "r", description: "設定ファイルの再読み込み" },
         { key: "b", description: "背景画像の選択" },
@@ -549,16 +549,6 @@ function ShortcutOverlay({ sessionCode, onClose }: { sessionCode: string | null;
                         </li>
                     ))}
                 </ul>
-                {sessionCode && (
-                    <div className="mt-4 border-t border-gray-700 pt-4">
-                        <p className="flex items-center justify-between">
-                            <span className="text-gray-300">認証コード</span>
-                            <span className="rounded bg-gray-700 px-2 py-0.5 font-mono text-sm text-yellow-300">
-                                {sessionCode}
-                            </span>
-                        </p>
-                    </div>
-                )}
             </div>
         </div>
     );
