@@ -8,6 +8,7 @@
   - 例: `chore: ステアリング追加 (プロジェクト規約)`
 - スコープは `viewer`, `publisher`, `watch-core` 等のパッケージ名を使用する
 - コミットは指示があるまで行わない
+- git push は明示されていない限りユーザに確認してから行うこと
 - issue 対応時は、`issues/` プレフィックス + issue ID + 対応内容に関するワードで構成されたブランチを作成して進行する
   - 例: `issues/3-publisher-comment-field`, `issues/4-viewer-show-comment`
 - issue 対応におけるコミットメッセージには `#{issue_id}` を含める
