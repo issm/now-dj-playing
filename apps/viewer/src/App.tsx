@@ -51,8 +51,8 @@ function App() {
     const webCleanupRef = useRef<(() => void) | null>(null);
     /** web モード接続中フラグ */
     const [connecting, setConnecting] = useState(false);
-    /** 参加中 DJ 一覧（id → 表示名） */
-    const [roster, setRoster] = useState<Map<string, string>>(new Map());
+    /** 参加中 DJ 一覧（id → DJ情報） */
+    const [roster, setRoster] = useState<Map<string, { djName: string; djImage: string | null }>>(new Map());
 
     // info アラートを閉じる（スライドアップアニメーション付き）
     const dismissInfo = useCallback(() => {
@@ -153,9 +153,10 @@ function App() {
                     const djId = track.dirName;
                     const djDisplayName = track.djName ?? track.dirName;
                     setRoster((prev) => {
-                        if (prev.get(djId) === djDisplayName) return prev;
+                        const existing = prev.get(djId);
+                        if (existing && existing.djName === djDisplayName) return prev;
                         const next = new Map(prev);
-                        next.set(djId, djDisplayName);
+                        next.set(djId, { djName: djDisplayName, djImage: existing?.djImage ?? null });
                         return next;
                     });
                 },
@@ -164,9 +165,10 @@ function App() {
                 },
                 onDjJoined: (dj) => {
                     setRoster((prev) => {
-                        if (prev.get(dj.id) === dj.djName) return prev;
+                        const existing = prev.get(dj.id);
+                        if (existing && existing.djName === dj.djName && existing.djImage === dj.djImage) return prev;
                         const next = new Map(prev);
-                        next.set(dj.id, dj.djName);
+                        next.set(dj.id, { djName: dj.djName, djImage: dj.djImage });
                         return next;
                     });
                 },
@@ -340,9 +342,10 @@ function App() {
             const djId = track.dirName;
             const djDisplayName = track.djName ?? track.dirName;
             setRoster((prev) => {
-                if (prev.get(djId) === djDisplayName) return prev;
+                const existing = prev.get(djId);
+                if (existing && existing.djName === djDisplayName) return prev;
                 const next = new Map(prev);
-                next.set(djId, djDisplayName);
+                next.set(djId, { djName: djDisplayName, djImage: existing?.djImage ?? track.djLogoPath });
                 return next;
             });
         },
@@ -351,9 +354,10 @@ function App() {
         },
         onDjJoined: (dj) => {
             setRoster((prev) => {
-                if (prev.get(dj.id) === dj.djName) return prev;
+                const existing = prev.get(dj.id);
+                if (existing && existing.djName === dj.djName && existing.djImage === dj.djImage) return prev;
                 const next = new Map(prev);
-                next.set(dj.id, dj.djName);
+                next.set(dj.id, { djName: dj.djName, djImage: dj.djImage });
                 return next;
             });
         },
@@ -608,7 +612,7 @@ function DjRosterHeader({
     connecting,
     onConnect,
 }: {
-    roster: Map<string, string>;
+    roster: Map<string, { djName: string; djImage: string | null }>;
     currentDjId: string | null;
     djLogoSrc: string | null;
     sessionCode: string | null;
@@ -650,29 +654,42 @@ function DjRosterHeader({
         <header className="relative flex h-[100px] shrink-0 flex-wrap items-center justify-center gap-x-8 gap-y-1 px-8">
             {entries.length === 1 ? (
                 <>
-                    {djLogoSrc ? (
-                        <img
-                            src={djLogoSrc}
-                            alt="DJ Logo"
-                            className="h-10 w-10 rounded-full object-cover md:h-12 md:w-12"
-                        />
-                    ) : null}
+                    {(() => {
+                        const logoSrc = entries[0]![1].djImage ?? djLogoSrc;
+                        if (!logoSrc) return null;
+                        const imgSrc = logoSrc.startsWith("data:") ? logoSrc : resolveImageSrc(logoSrc, "");
+                        return imgSrc ? (
+                            <img
+                                src={imgSrc}
+                                alt="DJ Logo"
+                                className="h-10 w-10 rounded-full object-cover md:h-12 md:w-12"
+                            />
+                        ) : null;
+                    })()}
                     <span className="text-xl font-semibold text-gray-300 md:text-3xl">
-                        {entries[0]![1]}
+                        {entries[0]![1].djName}
                     </span>
                 </>
             ) : (
-                entries.map(([id, name]) => {
+                entries.map(([id, info]) => {
                     const isCurrent = id === currentDjId;
+                    const logoSrc = info.djImage;
                     return (
                         <span
                             key={id}
-                            className={`px-2 text-xl font-semibold md:text-3xl ${isCurrent
+                            className={`flex items-center gap-2 px-2 text-xl font-semibold md:text-3xl ${isCurrent
                                 ? "border-b-4 border-yellow-500 text-white"
                                 : "border-b-4 border-transparent text-gray-500"
                                 }`}
                         >
-                            {name}
+                            {logoSrc && (
+                                <img
+                                    src={logoSrc.startsWith("data:") ? logoSrc : (resolveImageSrc(logoSrc, "") ?? "")}
+                                    alt="DJ Logo"
+                                    className="h-8 w-8 rounded-full object-cover md:h-10 md:w-10"
+                                />
+                            )}
+                            {info.djName}
                         </span>
                     );
                 })
