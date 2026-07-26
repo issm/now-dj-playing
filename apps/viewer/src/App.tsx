@@ -25,6 +25,10 @@ function App() {
     const [reloading, setReloading] = useState(false);
     const [eventName, setEventName] = useState<string | null>(null);
     const [showEventName, setShowEventName] = useState(true);
+    /** イベント名編集中フラグ */
+    const [editingEventName, setEditingEventName] = useState(false);
+    /** イベント名編集中の入力値 */
+    const [editingEventNameValue, setEditingEventNameValue] = useState("");
     /** 背景画像設定（null = 機能無効） */
     const [backgroundImageConfig, setBackgroundImageConfig] = useState<BackgroundImageConfig | null>(null);
     /** 現在選択中の背景画像の相対パス（null = なし） */
@@ -215,6 +219,9 @@ function App() {
         if (isMonitor) return;
 
         const handleKeyDown = (e: KeyboardEvent) => {
+            // イベント名編集中は一切無視
+            if (editingEventName) return;
+
             // BackgroundPicker が開いている場合は一切無視（自前でキー処理する）
             if (showBackgroundPicker) return;
 
@@ -288,7 +295,7 @@ function App() {
         };
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [isMonitor, backgroundImageConfig, showBackgroundPicker, showShortcuts]);
+    }, [isMonitor, backgroundImageConfig, showBackgroundPicker, showShortcuts, editingEventName]);
 
     useEffect(() => {
         if (isMonitor) {
@@ -415,7 +422,53 @@ function App() {
                 {/* イベント名（track の有無に関わらず表示） */}
                 {showEventName && eventName && (
                     <div className="shrink-0 pt-4 text-center">
-                        <span className="text-sm text-gray-400 md:text-base">{eventName}</span>
+                        {editingEventName ? (
+                            <span className="-mt-1 inline-flex items-center gap-5">
+                                <input
+                                    type="text"
+                                    value={editingEventNameValue}
+                                    onChange={(e) => setEditingEventNameValue(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === "Escape") {
+                                            e.stopPropagation();
+                                            setEditingEventName(false);
+                                        }
+                                    }}
+                                    autoFocus
+                                    className="w-96 rounded border border-gray-600 bg-gray-800 px-2 py-0.5 text-sm text-gray-200 outline-none focus:border-blue-500 md:text-base"
+                                />
+                                <span className="inline-flex gap-3">
+                                    <button
+                                        onClick={() => {
+                                            const trimmed = editingEventNameValue.trim();
+                                            if (trimmed) setEventName(trimmed);
+                                            setEditingEventName(false);
+                                        }}
+                                        className="cursor-pointer text-green-400 hover:text-green-300"
+                                        aria-label="決定"
+                                    >
+                                        ✓
+                                    </button>
+                                    <button
+                                        onClick={() => setEditingEventName(false)}
+                                        className="cursor-pointer text-red-400 hover:text-red-200"
+                                        aria-label="キャンセル"
+                                    >
+                                        ✕
+                                    </button>
+                                </span>
+                            </span>
+                        ) : (
+                            <span
+                                onClick={() => {
+                                    setEditingEventNameValue(eventName ?? "");
+                                    setEditingEventName(true);
+                                }}
+                                className="cursor-pointer text-sm text-gray-400 hover:text-gray-200 md:text-base"
+                            >
+                                {eventName}
+                            </span>
+                        )}
                     </div>
                 )}
 
