@@ -115,8 +115,9 @@ fn main() -> Result<()> {
             .or_else(|| config.local_dj_id())
             .unwrap_or_else(|| "dj-000".to_string());
         let dj_name = cli.dj_name.or_else(|| config.dj_name());
+        let dj_image = config.dj_image_path();
 
-        local::publish_local(&meta, &out, &id, dj_name.as_deref())?;
+        local::publish_local(&meta, &out, &id, dj_name.as_deref(), dj_image.as_deref())?;
     }
 
     Ok(())

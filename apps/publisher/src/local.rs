@@ -29,20 +29,25 @@ struct ReadyManifest {
 }
 
 /// local モードで楽曲情報をファイルに書き出す
+///
+/// dj_image が指定されている場合、dj_name よりも dj_image を優先して DJ プロファイルに使用する。
 pub fn publish_local(
     meta: &TrackMeta,
     out: &Path,
     id: &str,
     dj_name: Option<&str>,
+    dj_image: Option<&Path>,
 ) -> Result<()> {
     // 出力先ディレクトリの決定: {out}/{id}/
     let out_dir = out.join(id);
     fs::create_dir_all(&out_dir)
         .with_context(|| format!("出力先ディレクトリの作成に失敗: {}", out_dir.display()))?;
 
-    // DJ プロファイルの書き出し
-    if let Some(name) = dj_name {
-        write_dj_profile(&out_dir, name)?;
+    // DJ プロファイルの書き出し（優先度: 画像 > テキスト）
+    if let Some(image_path) = dj_image {
+        write_dj_profile_image(&out_dir, image_path)?;
+    } else if let Some(name) = dj_name {
+        write_dj_profile_text(&out_dir, name)?;
     }
 
     // アートワーク抽出
@@ -102,14 +107,8 @@ pub fn publish_local(
     Ok(())
 }
 
-/// DJ プロファイルを書き出す
-///
-/// 値が画像ファイルパス (png/jpg/jpeg) の場合はコピーして dj-profile.{ext} として出力、
-/// それ以外はテキストとして dj-profile.txt に出力する。
-fn write_dj_profile(out_dir: &Path, value: &str) -> Result<()> {
-    let path = PathBuf::from(value);
-
-    // 既存の dj-profile.* を削除
+/// 既存の dj-profile.* ファイルを削除する
+fn clean_dj_profile(out_dir: &Path) -> Result<()> {
     for entry in fs::read_dir(out_dir)?.flatten() {
         let name = entry.file_name();
         let name_str = name.to_string_lossy();
@@ -122,9 +121,54 @@ fn write_dj_profile(out_dir: &Path, value: &str) -> Result<()> {
             fs::remove_file(entry.path())?;
         }
     }
+    Ok(())
+}
+
+/// DJ プロファイルを画像ファイルとして書き出す
+fn write_dj_profile_image(out_dir: &Path, image_path: &Path) -> Result<()> {
+    clean_dj_profile(out_dir)?;
+
+    if !image_path.is_file() {
+        eprintln!(
+            "  警告: dj_image が見つかりません: {}",
+            image_path.display()
+        );
+        return Ok(());
+    }
+
+    let ext = image_path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("png")
+        .to_lowercase();
+
+    let dest_ext = match ext.as_str() {
+        "png" | "jpg" | "jpeg" => ext.as_str(),
+        _ => "png",
+    };
+
+    let dest = out_dir.join(format!("dj-profile.{}", dest_ext));
+    fs::copy(image_path, &dest).with_context(|| {
+        format!(
+            "DJ プロファイル画像のコピーに失敗: {}",
+            image_path.display()
+        )
+    })?;
+    eprintln!("  DJ プロファイル (画像): {}", dest.display());
+
+    Ok(())
+}
+
+/// DJ プロファイルをテキストとして書き出す
+///
+/// 値が画像ファイルパスの場合は画像としてコピーする（後方互換）。
+fn write_dj_profile_text(out_dir: &Path, value: &str) -> Result<()> {
+    clean_dj_profile(out_dir)?;
+
+    let path = PathBuf::from(value);
 
     if path.is_file() {
-        // 画像ファイルとして扱う
+        // 画像ファイルとして扱う（後方互換: dj_name に画像パスが入っているケース）
         let ext = path
             .extension()
             .and_then(|e| e.to_str())

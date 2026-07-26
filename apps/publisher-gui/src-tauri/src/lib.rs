@@ -236,7 +236,10 @@ fn publish(
             } else {
                 Some(dj_name.as_str())
             };
-            local::publish_local(&meta, &out, &dj_id, dj_name_opt).map_err(|e| e.to_string())?;
+            let config_guard = state.config.lock().unwrap();
+            let dj_image_path = config_guard.as_ref().and_then(|c| c.dj_image_path());
+            local::publish_local(&meta, &out, &dj_id, dj_name_opt, dj_image_path.as_deref())
+                .map_err(|e| e.to_string())?;
         }
         _ => return Err(format!("不明なモード: {}", mode)),
     }
