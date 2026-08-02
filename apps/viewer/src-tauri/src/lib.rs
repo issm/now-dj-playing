@@ -100,6 +100,19 @@ fn reload_config() -> Result<AppConfig, String> {
     reload_config_inner()
 }
 
+/// 設定値を設定ファイルに書き戻すコマンド
+///
+/// JSONC のコメントを保持しつつ、指定されたキーの値のみを更新する。
+/// 書き戻し後、インメモリの設定も再読み込みする。
+#[tauri::command]
+fn update_config_value(key: String, value: String) -> Result<(), String> {
+    let config = get_or_init_config()?;
+    config::update_config_value(&config.config_path, &key, &value)?;
+    // インメモリ設定を再読み込み
+    reload_config_inner()?;
+    Ok(())
+}
+
 /// バージョン情報を返すコマンド
 #[tauri::command]
 fn get_version_info() -> VersionInfo {
@@ -373,6 +386,7 @@ pub fn run() {
             start_watch,
             get_app_config,
             reload_config,
+            update_config_value,
             open_monitor,
             get_version_info,
             list_background_images,
