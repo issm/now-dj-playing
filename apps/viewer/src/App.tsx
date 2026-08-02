@@ -204,9 +204,13 @@ function App() {
         if (entry === null) {
             setBackgroundImagePath(null);
             setBackgroundImageAbsolutePath(null);
+            invoke("update_config_value", { key: "background_image.path", value: "null" })
+                .catch((err) => console.warn("[config writeback] background_image.path:", err));
         } else {
             setBackgroundImagePath(entry.path);
             setBackgroundImageAbsolutePath(entry.absolutePath);
+            invoke("update_config_value", { key: "background_image.path", value: JSON.stringify(entry.path) })
+                .catch((err) => console.warn("[config writeback] background_image.path:", err));
         }
         setShowBackgroundPicker(false);
     };
@@ -247,13 +251,28 @@ function App() {
                     }
                     break;
                 case "c":
-                    setShowComments((prev) => !prev);
+                    setShowComments((prev) => {
+                        const next = !prev;
+                        invoke("update_config_value", { key: "enable_comments", value: String(next) })
+                            .catch((err) => console.warn("[config writeback] enable_comments:", err));
+                        return next;
+                    });
                     break;
                 case "t":
-                    setShowTags((prev) => !prev);
+                    setShowTags((prev) => {
+                        const next = !prev;
+                        invoke("update_config_value", { key: "show_tags", value: String(next) })
+                            .catch((err) => console.warn("[config writeback] show_tags:", err));
+                        return next;
+                    });
                     break;
                 case "e":
-                    setShowEventName((prev) => !prev);
+                    setShowEventName((prev) => {
+                        const next = !prev;
+                        invoke("update_config_value", { key: "show_event_name", value: String(next) })
+                            .catch((err) => console.warn("[config writeback] show_event_name:", err));
+                        return next;
+                    });
                     break;
                 case "m":
                     invoke("open_monitor")
@@ -445,7 +464,11 @@ function App() {
                                     <button
                                         onClick={() => {
                                             const trimmed = editingEventNameValue.trim();
-                                            if (trimmed) setEventName(trimmed);
+                                            if (trimmed) {
+                                                setEventName(trimmed);
+                                                invoke("update_config_value", { key: "event_name", value: JSON.stringify(trimmed) })
+                                                    .catch((err) => console.warn("[config writeback] event_name:", err));
+                                            }
                                             setEditingEventName(false);
                                         }}
                                         className="cursor-pointer text-green-400 hover:text-green-300"
