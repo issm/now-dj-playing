@@ -108,3 +108,22 @@ cargo tauri build
 ```
 
 出力: `src-tauri/target/release/bundle/macos/now-dj-playing.app`
+
+## アプリアイコン
+
+元画像は `assets/app-icon-master.png`（1254x1254 / 透過 PNG / 円形デザイン）。
+アイコン一式は次のスクリプトで再生成する。
+
+```bash
+./scripts/build-icons.sh
+```
+
+処理内容:
+
+1. 元画像を直径 824px に縮小し、1024x1024 の透過キャンバス中央に配置（macOS のアイコン余白に合わせる）
+2. `cargo tauri icon` で `src-tauri/icons/` 配下のアイコン一式を生成
+3. macOS 専用のため、Android 向けと未参照の `64x64.png` を破棄
+
+必要なコマンド: `magick` (ImageMagick 7), `cargo-tauri`
+
+`tauri.conf.json` の `bundle.icon` は `32x32.png` / `128x128.png` / `128x128@2x.png` / `icon.icns` / `icon.ico` を参照する。
