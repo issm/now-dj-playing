@@ -25,9 +25,13 @@ apps/viewer/src-tauri/config/development.json
 
 # Tauri
 apps/viewer/src-tauri/gen/
+apps/publisher-gui/src-tauri/gen/
 
 # アイコン生成の中間ファイル (scripts/build-icons.sh で再生成可能)
 apps/viewer/assets/app-icon-1024.png
+apps/publisher-gui/assets/app-icon-1024.png
+apps/viewer/src-tauri/icons/ios/
+apps/publisher-gui/src-tauri/icons/ios/
 
 # Kiro
 .kiro/settings/mcp.json
