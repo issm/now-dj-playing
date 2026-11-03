@@ -51,7 +51,7 @@ Tauri API への依存を、`Platform` インターフェースの裏側に閉�
 
 | メンバー | Tauri | ブラウザ |
 |---|---|---|
-| `capabilities` | すべて有効 | `createSession` / `localMode` / `configFile` / `monitorWindow` / `backgroundImage` がすべて無効 |
+| `capabilities` | すべて有効 | `createSession` / `configFile` / `monitorWindow` / `backgroundImage` がすべて無効 (local モードは、ブラウザ版の設定が `mode: "web"` で固定のため、`capabilities` では扱わない) |
 | `windowLabel` | ウィンドウのラベル (`main` / `monitor`) | `main` |
 | `getConfig()` / `reloadConfig()` | `get_app_config` / `reload_config` | ビルド時の値から作った固定の設定 (`reloadConfig` は未使用) |
 | `saveSetting(key, value)` | `update_config_value` | 何もしない |
