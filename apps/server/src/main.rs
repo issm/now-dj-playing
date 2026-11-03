@@ -1,3 +1,4 @@
+mod connect;
 mod leave;
 mod publish;
 mod session;
@@ -49,9 +50,14 @@ async fn main() {
     let api = Router::new()
         .route("/sessions/create", post(session::create_session))
         .route("/sessions/join", post(session::join_session))
+        .route("/sessions/connect", post(connect::connect_session))
         .route("/sessions/{session_id}", delete(session::destroy_session))
         .route("/sessions/{session_id}/publish", post(publish::publish))
         .route("/sessions/{session_id}/leave", post(leave::leave))
+        .route(
+            "/sessions/{session_id}/disconnect",
+            post(connect::disconnect_session),
+        )
         .route("/sessions/{session_id}/stream", get(stream::stream))
         .with_state(store);
 
