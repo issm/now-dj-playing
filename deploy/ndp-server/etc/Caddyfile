@@ -3,7 +3,6 @@
 #
 # {$DOMAIN} を sed 等で実際のドメインに置き換えてから配置すること
 # 例: sed 's/{$DOMAIN}/ndp.iss.ms/' etc/Caddyfile
-
 {$DOMAIN} {
     # アクセスログ出力（fail2ban が監視する）
     log {
@@ -13,6 +12,28 @@
         }
         format json
     }
+
+    # viewer-web（ブラウザ版 viewer）の静的ファイル: /v/ で配信する
+    # 配置先は deploy-viewer.sh が同期する /opt/ndp-server/viewer/
+    redir /v /v/
+    handle_path /v/* {
+        root * /opt/ndp-server/viewer
+        encode zstd gzip
+
+        # index.html はキャッシュさせない（デプロイで古いハッシュ付きファイルが消えるため）
+        @html path / /index.html
+        header @html Cache-Control "no-cache"
+
+        # ファイル名にハッシュが付くアセットは長期キャッシュ
+        @assets path /assets/*
+        header @assets Cache-Control "public, max-age=31536000, immutable"
+
+        file_server
+    }
+
+    # ブラウザが自動で取りに来る favicon は 204 で応える
+    # （ndp-server に中継すると 404 になり、fail2ban が連続 404 として数えて ban してしまうため）
+    respond /favicon.ico 204
 
     reverse_proxy 127.0.0.1:8080
 

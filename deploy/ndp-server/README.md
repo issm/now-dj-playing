@@ -1,6 +1,6 @@
 # ndp-server デプロイ
 
-ndp-server を AWS Lightsail (Debian 13) にデプロイするためのスクリプト・設定ファイル群。
+ndp-server を AWS Lightsail (Debian 13) にデプロイするためのスクリプト・設定ファイル群。ブラウザ版 viewer (viewer-web) も、同じホストの `/v/` で配信する。
 
 ## 前提条件
 
@@ -10,12 +10,14 @@ ndp-server を AWS Lightsail (Debian 13) にデプロイするためのスクリ
 - `cargo-zigbuild` (`cargo install cargo-zigbuild`)
 - `zig` (zigbuild が内部で使用)
 - musl ターゲット (`rustup target add x86_64-unknown-linux-musl`)
+- viewer-web のデプロイ: Node.js / yarn (`apps/viewer` の依存インストール済み)、`rsync`
 
 ### リモート（Lightsail インスタンス）
 
 - Debian 13
 - SSH アクセス可能
 - ファイアウォールで TCP 22, 80, 443 を開放
+- viewer-web のデプロイ: `rsync` (`sudo apt install -y rsync`)
 
 ## ディレクトリ構成
 
@@ -23,6 +25,8 @@ ndp-server を AWS Lightsail (Debian 13) にデプロイするためのスクリ
 deploy/ndp-server/
 ├── build.sh              # クロスコンパイル
 ├── deploy.sh             # バイナリ転送 + サービス再起動
+├── build-viewer.sh       # viewer-web のビルド
+├── deploy-viewer.sh      # viewer-web の同期 (rsync)
 ├── dist/                 # ビルド成果物（.gitignore 対象）
 ├── etc/
 │   ├── Caddyfile         # Caddy 設定テンプレート
@@ -242,6 +246,77 @@ sudo fail2ban-client status caddy-ndp
 ./deploy.sh
 ```
 
+## viewer-web のデプロイ
+
+ブラウザ版 viewer を、ndp-server と同じホストの `/v/` で配信する（例: `https://ndp.iss.ms/v/`）。設計は [ADR-0039](../../docs/adr/0039-20261103-viewer-web-deploy.md) を参照。
+
+- 静的ファイルは、リモートの `/opt/ndp-server/viewer/` に置く（`DEPLOY_VIEWER_DIR` で変更できる）
+- API (`/api/*`) と `/health` は、従来どおり ndp-server に中継する（同一オリジン）
+- ndp-server のバイナリのデプロイ（`deploy.sh`）とは独立している
+
+> **注意: Caddyfile と静的ファイルを反映してから、ブラウザで `/v/` を開く。**
+> 反映前に `/v/` を開くと、リクエストが ndp-server に中継されて 404 になる（ブラウザが自動で取りに行く `/favicon.ico` も 404 になる）。fail2ban は、404 を 10 分間に 5 回数えると、その IP を 1 時間 ban する。ban されると、その IP からは HTTPS が `ERR_CONNECTION_REFUSED` になる（SSH は影響を受けない）。復旧は、後述の「ブラウザで `ERR_CONNECTION_REFUSED`」を参照。
+
+### 初回（または Caddyfile を更新したとき）
+
+#### 1. リモートに rsync を入れる（リモートで実行）
+
+```bash
+sudo apt install -y rsync
+```
+
+#### 2. Caddyfile を再生成して転送する（ローカルで実行）
+
+「既存環境への fail2ban 追加」の「1. Caddyfile 再生成・転送」と同じ手順で、`/tmp/Caddyfile` として転送する（`/v/` の配信と、`/favicon.ico` の設定が追加されている）。
+
+#### 3. 検証して反映する（リモートで実行）
+
+```bash
+# 構文の検証（エラーがあれば反映しない）
+sudo caddy validate --config /tmp/Caddyfile --adapter caddyfile
+
+# 反映
+sudo mv /tmp/Caddyfile /etc/caddy/Caddyfile
+sudo systemctl reload caddy
+```
+
+### 更新のたび
+
+#### 1. ビルド（ローカルで実行）
+
+```bash
+./build-viewer.sh
+```
+
+`apps/viewer/dist-web/` に出力される。サーバー URL は空（同一オリジン）でビルドする。
+
+#### 2. 同期（ローカルで実行）
+
+```bash
+# 変更内容の確認のみ（リモートは変更しない）
+./deploy-viewer.sh --dry-run
+
+# 同期する
+./deploy-viewer.sh
+```
+
+`dist-web/` の内容を、リモートの `/opt/ndp-server/viewer/` に**完全同期**する。手元にないファイルは、リモートからも削除される（`rsync --delete`）。`dist-web/index.html` がないときと、同期先のパスが不正なときは、何も変更せずに中止する。
+
+### 動作確認
+
+```bash
+curl -sI https://<DEPLOY_DOMAIN>/v/ | head -3
+# 期待: HTTP/2 200、cache-control: no-cache
+
+curl -s -o /dev/null -w "%{http_code}\n" https://<DEPLOY_DOMAIN>/v
+# 期待: 308 または 302（/v/ へのリダイレクト）
+
+curl -s -o /dev/null -w "%{http_code}\n" https://<DEPLOY_DOMAIN>/favicon.ico
+# 期待: 204
+```
+
+ブラウザで `https://<DEPLOY_DOMAIN>/v/` を開き、viewer の `view` のコードで Connect できることを確認する。
+
 ## 運用コマンド
 
 ```bash
@@ -291,3 +366,38 @@ Caddy が TLS 証明書を取得できていない。以下を確認:
 - jail が有効か: `sudo fail2ban-client status`
 - filter テスト: `sudo fail2ban-regex /var/log/caddy/access.log /etc/fail2ban/filter.d/caddy-ndp.conf`
 - ログ確認: `sudo tail -f /var/log/fail2ban.log`
+
+### viewer-web が表示されない
+
+- `/v/` が 404: 同期されているか (`ssh admin@HOST ls -la /opt/ndp-server/viewer/`)、Caddyfile が更新されているか (`ssh admin@HOST grep -n "/v/" /etc/caddy/Caddyfile`)
+- `/v/` が白画面: ブラウザの開発者ツールで、`/v/assets/...` が 404 になっていないか確認する。古い `index.html` が残っていれば、強制リロードする
+- Connect に失敗する: `https://<DEPLOY_DOMAIN>/api/...` に届いているか（`VITE_NDP_SERVER_URL` を空でビルドしたか。`./build-viewer.sh` を使う）
+- Caddy が読めない: 同期先が root 所有で、`caddy` ユーザーが読めるか (`ls -ld /opt/ndp-server /opt/ndp-server/viewer`)。`/opt/ndp-server` のモードが 750 など、他のユーザーに閉じていないか
+- `/v/` で 404 が続くと、fail2ban が ban することがある。ban された場合は、手動で unban する
+
+### deploy-viewer.sh が `rsync` で失敗する
+
+- リモートに `rsync` がない: `sudo apt install -y rsync`
+- ローカルの `rsync` が macOS 標準 (openrsync) でも動作する（`--chmod` や `--chown` は使っていない）
+
+### ブラウザで `ERR_CONNECTION_REFUSED`（SSH は繋がる）
+
+fail2ban に ban された可能性が高い（ban の対象は TCP 80/443 のみで、SSH は対象外）。ポート 80/443 が、タイムアウトではなく即座に拒否されるのが特徴。
+
+```bash
+# ban されている IP を確認
+ssh admin@HOST sudo fail2ban-client status caddy-ndp | grep "Banned IP"
+
+# ban された経緯（Found の連続と Ban）
+ssh admin@HOST sudo grep caddy-ndp /var/log/fail2ban.log | tail -n 20
+
+# 解除
+ssh admin@HOST sudo fail2ban-client set caddy-ndp unbanip <IP>
+```
+
+よくある原因:
+
+- Caddyfile を反映する前に `/v/` を開いた（404 が連続して数えられる）。反映の順序は、「viewer-web のデプロイ」を参照
+- 存在しないパスを、短時間に何度も開いた（`/favicon.ico` を含む）
+
+自分の IP を ban の対象外にしたいときは、サーバー上の jail 設定（`/etc/fail2ban/jail.d/caddy-ndp.local`）に `ignoreip = 127.0.0.1/8 ::1 <自分の IP>` を足して、`sudo systemctl restart fail2ban` する。IP が変わる環境では、使いにくい。
