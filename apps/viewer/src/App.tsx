@@ -5,7 +5,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import type { TrackPayload, AppConfig, BackgroundImageEntry, BackgroundImageConfig } from "./types";
 import { parseComment, type ParsedComment } from "./commentParser";
-import { useLocalDataSource, connectWebSession, destroyWebSession, type WebSession } from "./useDataSource";
+import { useLocalDataSource, createWebSession, destroyWebSession, type WebSession } from "./useDataSource";
 import { resolveImageSrc } from "./artwork";
 import MonitorView from "./MonitorView";
 import BackgroundPicker from "./BackgroundPicker";
@@ -49,8 +49,8 @@ function App() {
     const [webSession, setWebSession] = useState<WebSession | null>(null);
     /** web SSE 接続の cleanup 関数 */
     const webCleanupRef = useRef<(() => void) | null>(null);
-    /** web モード接続中フラグ */
-    const [connecting, setConnecting] = useState(false);
+    /** web モードセッション作成中フラグ */
+    const [creating, setCreating] = useState(false);
     /** 参加中 DJ 一覧（id → DJ情報） */
     const [roster, setRoster] = useState<Map<string, { djName: string; djImage: string | null }>>(new Map());
 
@@ -138,13 +138,13 @@ function App() {
         }
     };
 
-    // web モード: Connect ボタン押下時にセッション作成 + SSE 接続
-    const handleConnect = async () => {
+    // web モード: Create ボタン押下時にセッション作成 + SSE 接続
+    const handleCreate = async () => {
         if (!appConfig || appConfig.mode !== "web") return;
-        setConnecting(true);
+        setCreating(true);
         setError(null);
 
-        const cleanup = await connectWebSession(
+        const cleanup = await createWebSession(
             appConfig,
             {
                 onTrack: (track) => {
@@ -196,7 +196,7 @@ function App() {
         );
 
         webCleanupRef.current = cleanup;
-        setConnecting(false);
+        setCreating(false);
     };
 
     // 背景画像選択ハンドラ
@@ -505,9 +505,9 @@ function App() {
                     currentDjId={track?.dirName ?? null}
                     djLogoSrc={resolveImageSrc(track?.djLogoPath ?? null, track?.updatedAt ?? "")}
                     sessionCode={sessionCode}
-                    showConnectButton={appConfig?.mode === "web" && !webSession}
-                    connecting={connecting}
-                    onConnect={handleConnect}
+                    showCreateButton={appConfig?.mode === "web" && !webSession}
+                    creating={creating}
+                    onCreate={handleCreate}
                 />
 
                 <div className={`flex min-h-0 flex-1 w-full flex-col items-center ${track ? "justify-center" : "justify-start"}`}>
@@ -631,42 +631,42 @@ function DjRosterHeader({
     currentDjId,
     djLogoSrc,
     sessionCode,
-    showConnectButton,
-    connecting,
-    onConnect,
+    showCreateButton,
+    creating,
+    onCreate,
 }: {
     roster: Map<string, { djName: string; djImage: string | null }>;
     currentDjId: string | null;
     djLogoSrc: string | null;
     sessionCode: string | null;
-    showConnectButton: boolean;
-    connecting: boolean;
-    onConnect: () => void;
+    showCreateButton: boolean;
+    creating: boolean;
+    onCreate: () => void;
 }) {
     const entries = Array.from(roster.entries());
 
-    // 右端に表示する認証コード or Connect ボタン
-    const connectButton = showConnectButton ? (
+    // 右端に表示する認証コード or Create ボタン
+    const createButton = showCreateButton ? (
         <button
-            onClick={onConnect}
-            disabled={connecting}
+            onClick={onCreate}
+            disabled={creating}
             className="cursor-pointer rounded bg-green-600 px-3 py-1 text-base font-semibold text-white hover:bg-green-500 disabled:opacity-50"
         >
-            {connecting ? "接続中..." : "Connect"}
+            {creating ? "作成中..." : "Create"}
         </button>
     ) : null;
 
-    const sessionCodeBadge = !showConnectButton && sessionCode ? (
+    const sessionCodeBadge = !showCreateButton && sessionCode ? (
         <span className="font-mono text-base text-yellow-300/80">
             {sessionCode}
         </span>
     ) : null;
 
-    // n == 0: ロスターが空（Connect ボタン / 認証コードは中央表示）
+    // n == 0: ロスターが空（Create ボタン / 認証コードは中央表示）
     if (entries.length === 0) {
         return (
             <header className="relative flex h-[100px] shrink-0 items-center justify-center gap-3 px-8">
-                {connectButton}
+                {createButton}
                 {sessionCodeBadge}
             </header>
         );
@@ -720,7 +720,7 @@ function DjRosterHeader({
                     );
                 })
             )}
-            {connectButton}
+            {createButton}
             {sessionCodeBadge && (
                 <div className="absolute right-4 top-1/2 -translate-y-1/2">
                     {sessionCodeBadge}

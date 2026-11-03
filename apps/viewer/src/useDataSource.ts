@@ -37,7 +37,7 @@ export interface DataSourceCallbacks {
 /**
  * local モード専用のデータソースフック
  *
- * web モードは connectWebSession / disconnectWebSession を使う
+ * web モードは createWebSession / destroyWebSession を使う
  */
 export function useLocalDataSource(
   config: AppConfig | null,
@@ -90,7 +90,7 @@ function startLocalDataSource(
  *
  * 返り値の cleanup を呼ぶと SSE を切断する（サーバー側セッションは維持）
  */
-export async function connectWebSession(
+export async function createWebSession(
   config: AppConfig,
   callbacks: DataSourceCallbacks,
   onSessionCreated: (session: WebSession) => void,
