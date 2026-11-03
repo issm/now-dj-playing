@@ -5,8 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:web": "vite --mode web --port 1421",
     "build": "tsc -b && vite build",
+    "build:web": "tsc -b && vite build --mode web",
     "preview": "vite preview",
+    "preview:web": "vite preview --mode web",
     "tauri": "tauri"
   },
   "dependencies": {

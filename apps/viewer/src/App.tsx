@@ -22,6 +22,9 @@ const INFO_AUTO_DISMISS_MS = 10_000;
 /** セッションコードの桁数 */
 const SESSION_CODE_LENGTH = 6;
 
+/** 実行環境（Tauri / ブラウザ）で使える機能 */
+const { capabilities } = platform;
+
 function App() {
     const [track, setTrack] = useState<TrackPayload | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -91,7 +94,10 @@ function App() {
 
     // 設定から状態を反映するヘルパー
     const applyConfig = (config: AppConfig) => {
-        setInfoMessage(`${config.configPath} を読み込みました`);
+        // 設定ファイルがない環境（ブラウザ）では、読み込みの通知を出さない
+        if (config.configPath) {
+            setInfoMessage(`${config.configPath} を読み込みました`);
+        }
         setShowComments(config.enableComments);
         setShowTags(config.showTags);
         setEventName(config.eventName);
@@ -318,9 +324,12 @@ function App() {
 
             switch (e.key) {
                 case "r":
-                    handleReloadConfig();
+                    if (capabilities.configFile) {
+                        handleReloadConfig();
+                    }
                     break;
                 case "b":
+                    if (!capabilities.backgroundImage) break;
                     if (backgroundImageConfig) {
                         setShowBackgroundPicker(true);
                     } else {
@@ -352,6 +361,7 @@ function App() {
                     });
                     break;
                 case "m":
+                    if (!capabilities.monitorWindow) break;
                     platform.openMonitor()
                         .then(() => {
                             // モニタウィンドウが開いた直後に現在のトラック情報を転送
@@ -499,13 +509,16 @@ function App() {
             {error && (
                 <div className="absolute left-0 right-0 top-0 z-50 flex animate-slide-down items-center justify-between bg-red-900/80 px-4 py-2 text-sm text-red-200">
                     <span>{error}</span>
-                    <button
-                        onClick={handleReloadConfig}
-                        disabled={reloading}
-                        className="ml-4 shrink-0 cursor-pointer rounded bg-red-700 px-3 py-1 text-xs text-red-100 hover:bg-red-600 disabled:opacity-50"
-                    >
-                        {reloading ? "読込中..." : "再読み込み"}
-                    </button>
+                    {/* 設定ファイルがない環境（ブラウザ）では、再読み込みボタンを出さない */}
+                    {capabilities.configFile && (
+                        <button
+                            onClick={handleReloadConfig}
+                            disabled={reloading}
+                            className="ml-4 shrink-0 cursor-pointer rounded bg-red-700 px-3 py-1 text-xs text-red-100 hover:bg-red-600 disabled:opacity-50"
+                        >
+                            {reloading ? "読込中..." : "再読み込み"}
+                        </button>
+                    )}
                 </div>
             )}
 
@@ -616,17 +629,22 @@ function VersionDisplay() {
 }
 
 function ShortcutOverlay({ onClose }: { onClose: () => void }) {
+    // 実行環境で使えないショートカットは出さない
     const shortcuts = [
-        { key: "r", description: "設定ファイルの再読み込み" },
-        { key: "b", description: "背景画像の選択" },
-        { key: "c", description: "コメント表示のトグル" },
-        { key: "t", description: "タグ表示のトグル" },
-        { key: "e", description: "イベント名表示のトグル" },
-        { key: "Shift + s", description: "セッションの破棄 / 退出" },
-        { key: "m", description: "モニタウィンドウを開く" },
-        { key: "?", description: "ショートカット一覧の表示" },
-        { key: "Esc", description: "オーバーレイを閉じる" },
-    ];
+        { key: "r", description: "設定ファイルの再読み込み", enabled: capabilities.configFile },
+        { key: "b", description: "背景画像の選択", enabled: capabilities.backgroundImage },
+        { key: "c", description: "コメント表示のトグル", enabled: true },
+        { key: "t", description: "タグ表示のトグル", enabled: true },
+        { key: "e", description: "イベント名表示のトグル", enabled: true },
+        {
+            key: "Shift + s",
+            description: capabilities.createSession ? "セッションの破棄 / 退出" : "セッションから退出",
+            enabled: true,
+        },
+        { key: "m", description: "モニタウィンドウを開く", enabled: capabilities.monitorWindow },
+        { key: "?", description: "ショートカット一覧の表示", enabled: true },
+        { key: "Esc", description: "オーバーレイを閉じる", enabled: true },
+    ].filter((shortcut) => shortcut.enabled);
 
     return (
         <div
@@ -672,11 +690,11 @@ function TrackBody({ track, showComments, showTags }: { track: TrackPayload; sho
             {/* 左: アートワーク */}
             <div className="flex w-full shrink-0 items-center justify-center md:h-full md:w-1/2">
                 <img
-                    src={artworkSrc ?? "/default-artwork.png"}
+                    src={artworkSrc ?? `${import.meta.env.BASE_URL}default-artwork.png`}
                     alt="Artwork"
                     className="w-64 max-h-full rounded-lg object-contain shadow-lg md:w-full md:max-w-[85vh]"
                     onError={(e) => {
-                        e.currentTarget.src = "/default-artwork.png";
+                        e.currentTarget.src = `${import.meta.env.BASE_URL}default-artwork.png`;
                     }}
                 />
             </div>
@@ -728,16 +746,21 @@ function DjRosterHeader({
     const canConnect = !busy && connectCode.length === SESSION_CODE_LENGTH;
 
     // 未接続のときに表示する Create ボタン + Connect 用のコード入力欄とボタン
+    // （Create に対応しない環境（ブラウザ）では、Connect のみ）
     const sessionEntry = showSessionEntry ? (
         <div className="flex items-center gap-3">
-            <button
-                onClick={onCreate}
-                disabled={busy}
-                className="cursor-pointer rounded bg-green-600 px-3 py-1 text-base font-semibold text-white hover:bg-green-500 disabled:opacity-50"
-            >
-                {creating ? "作成中..." : "Create"}
-            </button>
-            <span className="text-sm text-gray-600">or</span>
+            {capabilities.createSession && (
+                <>
+                    <button
+                        onClick={onCreate}
+                        disabled={busy}
+                        className="cursor-pointer rounded bg-green-600 px-3 py-1 text-base font-semibold text-white hover:bg-green-500 disabled:opacity-50"
+                    >
+                        {creating ? "作成中..." : "Create"}
+                    </button>
+                    <span className="text-sm text-gray-600">or</span>
+                </>
+            )}
             <input
                 type="text"
                 inputMode="numeric"

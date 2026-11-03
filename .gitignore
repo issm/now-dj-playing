@@ -35,3 +35,7 @@ apps/publisher-gui/src-tauri/icons/ios/
 
 # Kiro
 .kiro/settings/mcp.json
+
+# ブラウザ版 viewer (apps/viewer)
+dist-web/
+.env.web

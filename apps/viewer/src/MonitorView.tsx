@@ -21,11 +21,11 @@ function MonitorView({ track }: { track: TrackPayload | null }) {
             {/* アートワーク */}
             <div className="flex shrink-0 justify-center">
                 <img
-                    src={artworkSrc ?? "/default-artwork.png"}
+                    src={artworkSrc ?? `${import.meta.env.BASE_URL}default-artwork.png`}
                     alt="Artwork"
                     className="aspect-square w-3/4 rounded object-contain shadow-md"
                     onError={(e) => {
-                        e.currentTarget.src = "/default-artwork.png";
+                        e.currentTarget.src = `${import.meta.env.BASE_URL}default-artwork.png`;
                     }}
                 />
             </div>

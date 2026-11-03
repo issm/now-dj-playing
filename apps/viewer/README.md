@@ -31,6 +31,31 @@ ndp-server に SSE 接続して楽曲情報をリアルタイム受信する。�
 - Connect した viewer: `Shift+S` またはアプリ終了時に、セッションから退出する（セッションは維持される）。Create した viewer がセッションを破棄すると、「セッションが終了しました」と表示されて待機画面に戻る
 - Connect には ndp-server 0.4.0 以降が必要
 
+## ブラウザ版
+
+Tauri なしで、ブラウザで動かせる。web モードの **Connect 専用**で、iPad などでの閲覧を想定している。設計は [ADR-0038](../../docs/adr/0038-20261103-viewer-browser-support.md) を参照。
+
+| 機能 | ブラウザ版 |
+|---|---|
+| Connect（`view` のコードで参加） | 対応 |
+| 表示のトグル（`c` `t` `e`） | 対応（永続化しない。リロードで初期値に戻る） |
+| 退出（`Shift+S`） | 対応。ページを閉じる / リロードするときも、退出を試みる（ベストエフォート） |
+| Create、local モード | 非対応 |
+| 設定ファイル（`r`）、背景画像（`b`）、モニタウィンドウ（`m`） | 非対応（ショートカット一覧にも出ない） |
+
+サーバー URL は、ビルド時の環境変数 `VITE_NDP_SERVER_URL` で固定する（バンドルに埋め込まれる）。未設定だとビルドが失敗する。同一オリジンで配信する場合は、空にする。
+
+```bash
+cd apps/viewer
+cp .env.web.example .env.web   # VITE_NDP_SERVER_URL を編集する
+
+yarn dev:web      # 開発サーバー (http://localhost:1421)
+yarn build:web    # dist-web/ に出力する（Tauri 用の dist/ とは別）
+yarn preview:web  # dist-web/ を確認する (http://localhost:4173)
+```
+
+`dist-web/` は静的ファイルで、相対パスでビルドされるため、任意のパスの下に置ける。ndp-server は CORS を全オリジンに許可している。ndp-server と同じホストの `/v/` で配信する手順は、[deploy/ndp-server/README.md](../../deploy/ndp-server/README.md) の「viewer-web のデプロイ」を参照（[ADR-0039](../../docs/adr/0039-20261103-viewer-web-deploy.md)）。
+
 ## セットアップ
 
 ```bash
