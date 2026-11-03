@@ -1,8 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { listen, emitTo } from "@tauri-apps/api/event";
-import { invoke } from "@tauri-apps/api/core";
-import { convertFileSrc } from "@tauri-apps/api/core";
-import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import type { TrackPayload, AppConfig, BackgroundImageEntry, BackgroundImageConfig } from "./types";
 import { parseComment, type ParsedComment } from "./commentParser";
 import {
@@ -15,6 +11,7 @@ import {
     type WebSession,
     type WebSessionCodes,
 } from "./useDataSource";
+import { platform } from "./platform";
 import { resolveImageSrc } from "./artwork";
 import MonitorView from "./MonitorView";
 import BackgroundPicker from "./BackgroundPicker";
@@ -50,7 +47,7 @@ function App() {
     const trackRef = useRef<TrackPayload | null>(null);
     const infoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    const windowLabel = getCurrentWebviewWindow().label;
+    const windowLabel = platform.windowLabel;
     const isMonitor = windowLabel === "monitor";
 
     /** 設定（データソースフックに渡す） */
@@ -143,7 +140,7 @@ function App() {
         } else {
             disconnectWebSession(session);
         }
-        invoke("clear_web_session").catch(() => { });
+        platform.clearWebSession().catch(() => { });
         resetWebSessionView();
     };
 
@@ -155,7 +152,7 @@ function App() {
         setInfoMessage(null);
         setInfoDismissing(false);
         try {
-            const config = await invoke<AppConfig>("reload_config");
+            const config = await platform.reloadConfig();
             applyConfig(config);
 
             // web モードで serverUrl が変わった場合はセッションを終了
@@ -186,13 +183,8 @@ function App() {
                 setEventName(session.eventName);
             }
         }
-        // Rust 側にセッション情報を保存（終了時の破棄 / 退出用）
-        invoke("set_web_session", {
-            sessionId: session.sessionId,
-            viewerToken: session.viewerToken,
-            serverUrl: session.serverUrl,
-            role: session.role,
-        }).catch((err) => {
+        // 終了時の破棄 / 退出用にセッション情報を登録する
+        platform.setWebSession(session).catch((err) => {
             console.warn("[web] set_web_session failed:", err);
         });
     };
@@ -212,7 +204,7 @@ function App() {
                 return next;
             });
             // モニタウィンドウに転送
-            emitTo("monitor", "monitor-track", track);
+            platform.sendTrackToMonitor(track);
         },
         onError: (message) => {
             setError(message);
@@ -237,7 +229,7 @@ function App() {
         // セッションが破棄された（SSE はすでに閉じている）
         onSessionDestroyed: () => {
             webCleanupRef.current = null;
-            invoke("clear_web_session").catch(() => { });
+            platform.clearWebSession().catch(() => { });
             resetWebSessionView();
             setError(null);
             setInfoDismissing(false);
@@ -280,12 +272,12 @@ function App() {
         if (entry === null) {
             setBackgroundImagePath(null);
             setBackgroundImageAbsolutePath(null);
-            invoke("update_config_value", { key: "background_image.path", value: "null" })
+            platform.saveSetting("background_image.path", "null")
                 .catch((err) => console.warn("[config writeback] background_image.path:", err));
         } else {
             setBackgroundImagePath(entry.path);
             setBackgroundImageAbsolutePath(entry.absolutePath);
-            invoke("update_config_value", { key: "background_image.path", value: JSON.stringify(entry.path) })
+            platform.saveSetting("background_image.path", JSON.stringify(entry.path))
                 .catch((err) => console.warn("[config writeback] background_image.path:", err));
         }
         setShowBackgroundPicker(false);
@@ -338,7 +330,7 @@ function App() {
                 case "c":
                     setShowComments((prev) => {
                         const next = !prev;
-                        invoke("update_config_value", { key: "enable_comments", value: String(next) })
+                        platform.saveSetting("enable_comments", String(next))
                             .catch((err) => console.warn("[config writeback] enable_comments:", err));
                         return next;
                     });
@@ -346,7 +338,7 @@ function App() {
                 case "t":
                     setShowTags((prev) => {
                         const next = !prev;
-                        invoke("update_config_value", { key: "show_tags", value: String(next) })
+                        platform.saveSetting("show_tags", String(next))
                             .catch((err) => console.warn("[config writeback] show_tags:", err));
                         return next;
                     });
@@ -354,19 +346,21 @@ function App() {
                 case "e":
                     setShowEventName((prev) => {
                         const next = !prev;
-                        invoke("update_config_value", { key: "show_event_name", value: String(next) })
+                        platform.saveSetting("show_event_name", String(next))
                             .catch((err) => console.warn("[config writeback] show_event_name:", err));
                         return next;
                     });
                     break;
                 case "m":
-                    invoke("open_monitor")
+                    platform.openMonitor()
                         .then(() => {
                             // モニタウィンドウが開いた直後に現在のトラック情報を転送
                             if (trackRef.current) {
                                 // 少し待ってからイベントリスナー登録後に送る
                                 setTimeout(() => {
-                                    emitTo("monitor", "monitor-track", trackRef.current);
+                                    if (trackRef.current) {
+                                        platform.sendTrackToMonitor(trackRef.current);
+                                    }
                                 }, 100);
                             }
                         })
@@ -399,13 +393,9 @@ function App() {
     useEffect(() => {
         if (isMonitor) {
             // モニタウィンドウ: メインから転送されたトラック情報を受信
-            const unlistenMonitorTrack = listen<TrackPayload>("monitor-track", (event) => {
-                setTrack(event.payload);
+            return platform.listenMonitorTrack((track) => {
+                setTrack(track);
             });
-
-            return () => {
-                unlistenMonitorTrack.then((fn) => fn());
-            };
         }
 
         // メインウィンドウ: バックエンドから設定を取得
@@ -413,7 +403,7 @@ function App() {
 
         (async () => {
             try {
-                const config = await invoke<AppConfig>("get_app_config");
+                const config = await platform.getConfig();
 
                 if (cancelled) return;
 
@@ -480,7 +470,7 @@ function App() {
                 <div
                     className="absolute inset-0 z-0"
                     style={{
-                        backgroundImage: `url(${convertFileSrc(backgroundImageAbsolutePath)})`,
+                        backgroundImage: `url(${platform.convertFileSrc(backgroundImageAbsolutePath)})`,
                         backgroundSize: "cover",
                         backgroundPosition: "center",
                         backgroundRepeat: "no-repeat",
@@ -544,7 +534,7 @@ function App() {
                                             const trimmed = editingEventNameValue.trim();
                                             if (trimmed) {
                                                 setEventName(trimmed);
-                                                invoke("update_config_value", { key: "event_name", value: JSON.stringify(trimmed) })
+                                                platform.saveSetting("event_name", JSON.stringify(trimmed))
                                                     .catch((err) => console.warn("[config writeback] event_name:", err));
                                             }
                                             setEditingEventName(false);

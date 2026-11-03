@@ -1,6 +1,5 @@
 import { useEffect, useRef } from "react";
-import { listen, emitTo } from "@tauri-apps/api/event";
-import { invoke } from "@tauri-apps/api/core";
+import { platform } from "./platform";
 import type { AppConfig, TrackPayload } from "./types";
 
 /** 参加中 DJ の情報 */
@@ -72,39 +71,8 @@ export function useLocalDataSource(
     if (!config) return;
     if (config.mode !== "local") return;
 
-    return startLocalDataSource(config, callbacksRef);
+    return platform.startLocalDataSource(callbacksRef);
   }, [config]);
-}
-
-/** local モード: Tauri IPC */
-function startLocalDataSource(
-  _config: AppConfig,
-  callbacksRef: React.RefObject<DataSourceCallbacks>,
-): () => void {
-  // watcher を開始
-  invoke("start_watch").catch((err) => {
-    callbacksRef.current.onError(String(err));
-  });
-
-  const unlistenTrack = listen<TrackPayload>("track-changed", (event) => {
-    callbacksRef.current.onTrack(event.payload);
-    // モニタウィンドウに転送
-    emitTo("monitor", "monitor-track", event.payload);
-  });
-
-  const unlistenError = listen<{ dirName: string; message: string }>(
-    "watch-error",
-    (event) => {
-      callbacksRef.current.onError(
-        `${event.payload.dirName}: ${event.payload.message}`,
-      );
-    },
-  );
-
-  return () => {
-    unlistenTrack.then((fn) => fn());
-    unlistenError.then((fn) => fn());
-  };
 }
 
 /** エラーからユーザ向けのメッセージを取り出す */

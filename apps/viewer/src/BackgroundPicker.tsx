@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { convertFileSrc } from "@tauri-apps/api/core";
+import { platform } from "./platform";
 import type { BackgroundImageEntry } from "./types";
 
 interface BackgroundPickerProps {
@@ -36,7 +35,7 @@ export default function BackgroundPicker({ currentPath, onSelect, onClose }: Bac
     useEffect(() => {
         (async () => {
             try {
-                const entries = await invoke<BackgroundImageEntry[]>("list_background_images");
+                const entries = await platform.listBackgroundImages();
                 setImages(entries);
             } catch (err) {
                 setError(String(err));
@@ -87,8 +86,8 @@ export default function BackgroundPicker({ currentPath, onSelect, onClose }: Bac
                             onClick={() => onSelect(null)}
                             style={thumbStyle}
                             className={`flex w-full cursor-pointer items-center justify-center rounded border-2 text-sm transition-colors ${currentPath === null
-                                    ? "border-blue-500 bg-blue-900/30 text-blue-200"
-                                    : "border-gray-600 bg-gray-800 text-gray-400 hover:border-gray-500 hover:bg-gray-700"
+                                ? "border-blue-500 bg-blue-900/30 text-blue-200"
+                                : "border-gray-600 bg-gray-800 text-gray-400 hover:border-gray-500 hover:bg-gray-700"
                                 }`}
                         >
                             なし
@@ -101,12 +100,12 @@ export default function BackgroundPicker({ currentPath, onSelect, onClose }: Bac
                                 onClick={() => onSelect(entry)}
                                 style={thumbStyle}
                                 className={`group relative w-full cursor-pointer overflow-hidden rounded border-2 transition-colors ${currentPath === entry.path
-                                        ? "border-blue-500"
-                                        : "border-gray-600 hover:border-gray-500"
+                                    ? "border-blue-500"
+                                    : "border-gray-600 hover:border-gray-500"
                                     }`}
                             >
                                 <img
-                                    src={convertFileSrc(entry.absolutePath)}
+                                    src={platform.convertFileSrc(entry.absolutePath)}
                                     alt={entry.path}
                                     className="h-full w-full object-cover"
                                     loading="lazy"
