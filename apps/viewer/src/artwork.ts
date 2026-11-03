@@ -1,4 +1,4 @@
-import { convertFileSrc } from "@tauri-apps/api/core";
+import { platform } from "./platform";
 
 /**
  * TrackPayload の artworkPath / djLogoPath から実際に <img src> に渡せる URL を組み立てる
@@ -12,11 +12,9 @@ export function resolveImageSrc(
   cacheBusterKey: string,
 ): string | null {
   if (!path) return null;
-
   if (path.startsWith("data:")) {
     return path;
   }
-
   const cacheBuster = `?t=${encodeURIComponent(cacheBusterKey)}`;
-  return convertFileSrc(path) + cacheBuster;
+  return platform.convertFileSrc(path) + cacheBuster;
 }
