@@ -5,13 +5,25 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import type { TrackPayload, AppConfig, BackgroundImageEntry, BackgroundImageConfig } from "./types";
 import { parseComment, type ParsedComment } from "./commentParser";
-import { useLocalDataSource, createWebSession, destroyWebSession, type WebSession } from "./useDataSource";
+import {
+    useLocalDataSource,
+    createWebSession,
+    connectWebSession,
+    destroyWebSession,
+    disconnectWebSession,
+    type DataSourceCallbacks,
+    type WebSession,
+    type WebSessionCodes,
+} from "./useDataSource";
 import { resolveImageSrc } from "./artwork";
 import MonitorView from "./MonitorView";
 import BackgroundPicker from "./BackgroundPicker";
 
 /** success アラートの自動非表示までの時間 (ms) */
 const INFO_AUTO_DISMISS_MS = 10_000;
+
+/** セッションコードの桁数 */
+const SESSION_CODE_LENGTH = 6;
 
 function App() {
     const [track, setTrack] = useState<TrackPayload | null>(null);
@@ -43,14 +55,18 @@ function App() {
 
     /** 設定（データソースフックに渡す） */
     const [appConfig, setAppConfig] = useState<AppConfig | null>(null);
-    /** web モードのセッションコード */
-    const [sessionCode, setSessionCode] = useState<string | null>(null);
+    /** web モードの認証コード（Create した viewer のみ。Connect した viewer は null） */
+    const [sessionCodes, setSessionCodes] = useState<WebSessionCodes | null>(null);
     /** web セッション情報（接続中に保持） */
     const [webSession, setWebSession] = useState<WebSession | null>(null);
     /** web SSE 接続の cleanup 関数 */
     const webCleanupRef = useRef<(() => void) | null>(null);
     /** web モードセッション作成中フラグ */
     const [creating, setCreating] = useState(false);
+    /** web モードセッション参加中フラグ */
+    const [connecting, setConnecting] = useState(false);
+    /** Connect 用に入力された viewer 用コード */
+    const [connectCode, setConnectCode] = useState("");
     /** 参加中 DJ 一覧（id → DJ情報） */
     const [roster, setRoster] = useState<Map<string, { djName: string; djImage: string | null }>>(new Map());
 
@@ -100,8 +116,39 @@ function App() {
         }
     };
 
+    /** web セッションに関する表示状態を初期状態に戻す（SSE の切断やサーバーへの通知は行わない） */
+    const resetWebSessionView = () => {
+        setWebSession(null);
+        setSessionCodes(null);
+        setTrack(null);
+        setRoster(new Map());
+    };
+
+    /**
+     * web セッションを終了する
+     *
+     * - SSE を切断する
+     * - owner はセッションを破棄し、participant はセッションから退出する（いずれもベストエフォート）
+     * - 表示状態を待機画面に戻す
+     */
+    const endWebSession = (session: WebSession) => {
+        // SSE 切断
+        if (webCleanupRef.current) {
+            webCleanupRef.current();
+            webCleanupRef.current = null;
+        }
+        // サーバー側の後始末
+        if (session.role === "owner") {
+            destroyWebSession(session);
+        } else {
+            disconnectWebSession(session);
+        }
+        invoke("clear_web_session").catch(() => { });
+        resetWebSessionView();
+    };
+
     // 設定を再読み込みする
-    // web モードではセッションを維持する（serverUrl 変更時のみ破棄）
+    // web モードではセッションを維持する（serverUrl 変更時のみ終了する）
     const handleReloadConfig = async () => {
         setReloading(true);
         setError(null);
@@ -111,23 +158,13 @@ function App() {
             const config = await invoke<AppConfig>("reload_config");
             applyConfig(config);
 
-            // web モードで serverUrl が変わった場合はセッションを破棄
+            // web モードで serverUrl が変わった場合はセッションを終了
             if (
                 config.mode === "web" &&
                 webSession &&
                 webSession.serverUrl !== config.web.serverUrl
             ) {
-                // SSE 切断
-                if (webCleanupRef.current) {
-                    webCleanupRef.current();
-                    webCleanupRef.current = null;
-                }
-                // サーバー側セッション破棄
-                destroyWebSession(webSession);
-                setWebSession(null);
-                setSessionCode(null);
-                setTrack(null);
-                setRoster(new Map());
+                endWebSession(webSession);
             }
 
             setAppConfig(config);
@@ -138,65 +175,104 @@ function App() {
         }
     };
 
+    /** セッションを確立した直後の共通処理（Create / Connect） */
+    const registerWebSession = (session: WebSession) => {
+        setWebSession(session);
+        setSessionCodes(session.codes);
+        if (session.role === "participant") {
+            setConnectCode("");
+            // イベント名は、参加したセッションのものを表示する
+            if (session.eventName) {
+                setEventName(session.eventName);
+            }
+        }
+        // Rust 側にセッション情報を保存（終了時の破棄 / 退出用）
+        invoke("set_web_session", {
+            sessionId: session.sessionId,
+            viewerToken: session.viewerToken,
+            serverUrl: session.serverUrl,
+            role: session.role,
+        }).catch((err) => {
+            console.warn("[web] set_web_session failed:", err);
+        });
+    };
+
+    /** web セッションのコールバック（Create / Connect 共通） */
+    const buildWebCallbacks = (): DataSourceCallbacks => ({
+        onTrack: (track) => {
+            setTrack(track);
+            setError(null);
+            const djId = track.dirName;
+            const djDisplayName = track.djName ?? track.dirName;
+            setRoster((prev) => {
+                const existing = prev.get(djId);
+                if (existing && existing.djName === djDisplayName) return prev;
+                const next = new Map(prev);
+                next.set(djId, { djName: djDisplayName, djImage: existing?.djImage ?? null });
+                return next;
+            });
+            // モニタウィンドウに転送
+            emitTo("monitor", "monitor-track", track);
+        },
+        onError: (message) => {
+            setError(message);
+        },
+        onDjJoined: (dj) => {
+            setRoster((prev) => {
+                const existing = prev.get(dj.id);
+                if (existing && existing.djName === dj.djName && existing.djImage === dj.djImage) return prev;
+                const next = new Map(prev);
+                next.set(dj.id, { djName: dj.djName, djImage: dj.djImage });
+                return next;
+            });
+        },
+        onDjLeft: (dj) => {
+            setRoster((prev) => {
+                if (!prev.has(dj.id)) return prev;
+                const next = new Map(prev);
+                next.delete(dj.id);
+                return next;
+            });
+        },
+        // セッションが破棄された（SSE はすでに閉じている）
+        onSessionDestroyed: () => {
+            webCleanupRef.current = null;
+            invoke("clear_web_session").catch(() => { });
+            resetWebSessionView();
+            setError(null);
+            setInfoDismissing(false);
+            setInfoMessage("セッションが終了しました");
+        },
+    });
+
     // web モード: Create ボタン押下時にセッション作成 + SSE 接続
     const handleCreate = async () => {
         if (!appConfig || appConfig.mode !== "web") return;
         setCreating(true);
         setError(null);
 
-        const cleanup = await createWebSession(
-            appConfig,
-            {
-                onTrack: (track) => {
-                    setTrack(track);
-                    setError(null);
-                    const djId = track.dirName;
-                    const djDisplayName = track.djName ?? track.dirName;
-                    setRoster((prev) => {
-                        const existing = prev.get(djId);
-                        if (existing && existing.djName === djDisplayName) return prev;
-                        const next = new Map(prev);
-                        next.set(djId, { djName: djDisplayName, djImage: existing?.djImage ?? null });
-                        return next;
-                    });
-                },
-                onError: (message) => {
-                    setError(message);
-                },
-                onDjJoined: (dj) => {
-                    setRoster((prev) => {
-                        const existing = prev.get(dj.id);
-                        if (existing && existing.djName === dj.djName && existing.djImage === dj.djImage) return prev;
-                        const next = new Map(prev);
-                        next.set(dj.id, { djName: dj.djName, djImage: dj.djImage });
-                        return next;
-                    });
-                },
-                onDjLeft: (dj) => {
-                    setRoster((prev) => {
-                        if (!prev.has(dj.id)) return prev;
-                        const next = new Map(prev);
-                        next.delete(dj.id);
-                        return next;
-                    });
-                },
-            },
-            (session) => {
-                setWebSession(session);
-                setSessionCode(session.code);
-                // Rust 側にセッション情報を保存（終了時 destroy 用）
-                invoke("set_web_session", {
-                    sessionId: session.sessionId,
-                    viewerToken: session.viewerToken,
-                    serverUrl: session.serverUrl,
-                }).catch((err) => {
-                    console.warn("[web] set_web_session failed:", err);
-                });
-            },
-        );
+        const cleanup = await createWebSession(appConfig, buildWebCallbacks(), registerWebSession);
 
         webCleanupRef.current = cleanup;
         setCreating(false);
+    };
+
+    // web モード: Connect ボタン押下時に、作成済みセッションへ参加 + SSE 接続
+    const handleConnect = async () => {
+        if (!appConfig || appConfig.mode !== "web") return;
+        if (connectCode.length !== SESSION_CODE_LENGTH) return;
+        setConnecting(true);
+        setError(null);
+
+        const cleanup = await connectWebSession(
+            appConfig.web.serverUrl,
+            connectCode,
+            buildWebCallbacks(),
+            registerWebSession,
+        );
+
+        webCleanupRef.current = cleanup;
+        setConnecting(false);
     };
 
     // 背景画像選択ハンドラ
@@ -225,6 +301,15 @@ function App() {
         if (isMonitor) return;
 
         const handleKeyDown = (e: KeyboardEvent) => {
+            // 入力欄（Connect 用のコード入力など）にフォーカスがあるときはショートカットを無視する
+            const target = e.target;
+            if (
+                target instanceof HTMLElement &&
+                (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)
+            ) {
+                return;
+            }
+
             // イベント名編集中は一切無視
             if (editingEventName) return;
 
@@ -289,21 +374,14 @@ function App() {
                             console.error("モニタウィンドウの起動に失敗:", err);
                         });
                     break;
-                case "S": // Shift+S: セッション破棄
+                case "S": // Shift+S: セッション破棄（owner）/ 退出（participant）
                     if (webSession) {
-                        // SSE 切断
-                        if (webCleanupRef.current) {
-                            webCleanupRef.current();
-                            webCleanupRef.current = null;
-                        }
-                        // サーバー側セッション破棄
-                        destroyWebSession(webSession);
-                        invoke("clear_web_session").catch(() => { });
-                        setWebSession(null);
-                        setSessionCode(null);
-                        setTrack(null);
-                        setRoster(new Map());
-                        setInfoMessage("セッションを破棄しました");
+                        endWebSession(webSession);
+                        setInfoMessage(
+                            webSession.role === "owner"
+                                ? "セッションを破棄しました"
+                                : "セッションから退出しました",
+                        );
                     }
                     break;
                 case "?":
@@ -504,10 +582,14 @@ function App() {
                     roster={roster}
                     currentDjId={track?.dirName ?? null}
                     djLogoSrc={resolveImageSrc(track?.djLogoPath ?? null, track?.updatedAt ?? "")}
-                    sessionCode={sessionCode}
-                    showCreateButton={appConfig?.mode === "web" && !webSession}
+                    sessionCodes={sessionCodes}
+                    showSessionEntry={appConfig?.mode === "web" && !webSession}
                     creating={creating}
+                    connecting={connecting}
+                    connectCode={connectCode}
+                    onConnectCodeChange={setConnectCode}
                     onCreate={handleCreate}
+                    onConnect={handleConnect}
                 />
 
                 <div className={`flex min-h-0 flex-1 w-full flex-col items-center ${track ? "justify-center" : "justify-start"}`}>
@@ -550,7 +632,7 @@ function ShortcutOverlay({ onClose }: { onClose: () => void }) {
         { key: "c", description: "コメント表示のトグル" },
         { key: "t", description: "タグ表示のトグル" },
         { key: "e", description: "イベント名表示のトグル" },
-        { key: "Shift + s", description: "セッションの破棄" },
+        { key: "Shift + s", description: "セッションの破棄 / 退出" },
         { key: "m", description: "モニタウィンドウを開く" },
         { key: "?", description: "ショートカット一覧の表示" },
         { key: "Esc", description: "オーバーレイを閉じる" },
@@ -630,44 +712,84 @@ function DjRosterHeader({
     roster,
     currentDjId,
     djLogoSrc,
-    sessionCode,
-    showCreateButton,
+    sessionCodes,
+    showSessionEntry,
     creating,
+    connecting,
+    connectCode,
+    onConnectCodeChange,
     onCreate,
+    onConnect,
 }: {
     roster: Map<string, { djName: string; djImage: string | null }>;
     currentDjId: string | null;
     djLogoSrc: string | null;
-    sessionCode: string | null;
-    showCreateButton: boolean;
+    sessionCodes: WebSessionCodes | null;
+    showSessionEntry: boolean;
     creating: boolean;
+    connecting: boolean;
+    connectCode: string;
+    onConnectCodeChange: (code: string) => void;
     onCreate: () => void;
+    onConnect: () => void;
 }) {
     const entries = Array.from(roster.entries());
+    const busy = creating || connecting;
+    const canConnect = !busy && connectCode.length === SESSION_CODE_LENGTH;
 
-    // 右端に表示する認証コード or Create ボタン
-    const createButton = showCreateButton ? (
-        <button
-            onClick={onCreate}
-            disabled={creating}
-            className="cursor-pointer rounded bg-green-600 px-3 py-1 text-base font-semibold text-white hover:bg-green-500 disabled:opacity-50"
-        >
-            {creating ? "作成中..." : "Create"}
-        </button>
+    // 未接続のときに表示する Create ボタン + Connect 用のコード入力欄とボタン
+    const sessionEntry = showSessionEntry ? (
+        <div className="flex items-center gap-3">
+            <button
+                onClick={onCreate}
+                disabled={busy}
+                className="cursor-pointer rounded bg-green-600 px-3 py-1 text-base font-semibold text-white hover:bg-green-500 disabled:opacity-50"
+            >
+                {creating ? "作成中..." : "Create"}
+            </button>
+            <span className="text-sm text-gray-600">or</span>
+            <input
+                type="text"
+                inputMode="numeric"
+                maxLength={SESSION_CODE_LENGTH}
+                placeholder="000000"
+                value={connectCode}
+                onChange={(e) =>
+                    onConnectCodeChange(e.target.value.replace(/\D/g, "").slice(0, SESSION_CODE_LENGTH))
+                }
+                onKeyDown={(e) => {
+                    if (e.key === "Enter" && canConnect) {
+                        onConnect();
+                    }
+                }}
+                disabled={busy}
+                aria-label="viewer 用コード"
+                className="w-28 rounded border border-gray-600 bg-gray-800 px-2 py-1 text-center font-mono text-base text-gray-200 outline-none focus:border-blue-500 disabled:opacity-50"
+            />
+            <button
+                onClick={onConnect}
+                disabled={!canConnect}
+                className="cursor-pointer rounded bg-blue-600 px-3 py-1 text-base font-semibold text-white hover:bg-blue-500 disabled:cursor-default disabled:opacity-50"
+            >
+                {connecting ? "参加中..." : "Connect"}
+            </button>
+        </div>
     ) : null;
 
-    const sessionCodeBadge = !showCreateButton && sessionCode ? (
-        <span className="font-mono text-base text-yellow-300/80">
-            {sessionCode}
+    // Create した viewer のみ、publisher 用 / viewer 用の認証コードを表示する
+    const sessionCodesBadge = !showSessionEntry && sessionCodes ? (
+        <span className="flex select-none items-baseline gap-4 text-base text-yellow-300/80">
+            <CopyableCode label="publish" code={sessionCodes.publisher} />
+            {sessionCodes.viewer && <CopyableCode label="view" code={sessionCodes.viewer} />}
         </span>
     ) : null;
 
-    // n == 0: ロスターが空（Create ボタン / 認証コードは中央表示）
+    // n == 0: ロスターが空（Create / Connect の入力 / 認証コードは中央表示）
     if (entries.length === 0) {
         return (
             <header className="relative flex h-[100px] shrink-0 items-center justify-center gap-3 px-8">
-                {createButton}
-                {sessionCodeBadge}
+                {sessionEntry}
+                {sessionCodesBadge}
             </header>
         );
     }
@@ -720,10 +842,10 @@ function DjRosterHeader({
                     );
                 })
             )}
-            {createButton}
-            {sessionCodeBadge && (
+            {sessionEntry}
+            {sessionCodesBadge && (
                 <div className="absolute right-4 top-1/2 -translate-y-1/2">
-                    {sessionCodeBadge}
+                    {sessionCodesBadge}
                 </div>
             )}
         </header>
@@ -819,3 +941,47 @@ function GenericCommentView({ parsed, showTags }: { parsed: Extract<ParsedCommen
 }
 
 export default App;
+
+/**
+ * ラベル付きのセッションコード
+ *
+ * ラベルとコードはマウス選択できない。コードをクリックするとクリップボードにコピーする
+ */
+function CopyableCode({ label, code }: { label: string; code: string }) {
+    const [copied, setCopied] = useState(false);
+    const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    // アンマウント時にタイマーを破棄する
+    useEffect(() => {
+        return () => {
+            if (timerRef.current) clearTimeout(timerRef.current);
+        };
+    }, []);
+
+    const handleCopy = () => {
+        navigator.clipboard.writeText(code).then(
+            () => {
+                // コピーできたことを、一瞬の色の変化で知らせる
+                setCopied(true);
+                if (timerRef.current) clearTimeout(timerRef.current);
+                timerRef.current = setTimeout(() => setCopied(false), 1500);
+            },
+            (err) => console.warn("[clipboard] コピーに失敗:", err),
+        );
+    };
+
+    return (
+        <span className="select-none">
+            <span className="mr-1 text-xs text-gray-500">{label}</span>
+            <button
+                type="button"
+                onClick={handleCopy}
+                title="クリックでコピー"
+                className={`cursor-pointer select-none font-mono transition-colors ${copied ? "text-green-300" : "hover:text-yellow-200"
+                    }`}
+            >
+                {code}
+            </button>
+        </span>
+    );
+}

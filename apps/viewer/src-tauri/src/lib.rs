@@ -12,13 +12,16 @@ use watch_core::{DirWatcher, DjProfile, WatchEvent};
 /// アプリケーション設定のグローバルインスタンス
 static APP_CONFIG: Mutex<Option<Result<AppConfig, String>>> = Mutex::new(None);
 
-/// web モードのセッション情報（終了時 destroy 用）
+/// web モードのセッション情報（終了時の破棄 / 退出用）
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct WebSessionInfo {
     session_id: String,
     viewer_token: String,
     server_url: String,
+    /// Connect で参加した viewer（参加者用 token）かどうか。
+    /// false なら Create した viewer（owner の token）
+    participant: bool,
 }
 
 static WEB_SESSION: Mutex<Option<WebSessionInfo>> = Mutex::new(None);
@@ -241,13 +244,22 @@ fn open_monitor(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// フロントエンドから web セッション情報を受け取るコマンド（終了時 destroy 用）
+/// フロントエンドから web セッション情報を受け取るコマンド（終了時の破棄 / 退出用）
+///
+/// `role` は `"owner"`（Create した viewer）または `"participant"`（Connect した viewer）。
+/// 省略時は owner として扱う。
 #[tauri::command]
-fn set_web_session(session_id: String, viewer_token: String, server_url: String) {
+fn set_web_session(
+    session_id: String,
+    viewer_token: String,
+    server_url: String,
+    role: Option<String>,
+) {
     let info = WebSessionInfo {
         session_id,
         viewer_token,
         server_url,
+        participant: role.as_deref() == Some("participant"),
     };
     *WEB_SESSION.lock().unwrap() = Some(info);
 }
@@ -398,34 +410,60 @@ pub fn run() {
 
     app.run(|_app_handle, event| {
         if let tauri::RunEvent::Exit = event {
-            destroy_session_on_exit();
+            end_session_on_exit();
         }
     });
 }
 
-/// アプリ終了時にサーバー側のセッションを破棄する（ベストエフォート）
-fn destroy_session_on_exit() {
+/// アプリ終了時にサーバー側のセッションを後始末する（ベストエフォート）
+///
+/// - Create した viewer（owner）: セッションを破棄する（`DELETE /api/sessions/{id}`）
+/// - Connect した viewer（participant）: セッションから退出する（`POST /api/sessions/{id}/disconnect`）
+fn end_session_on_exit() {
     let session = WEB_SESSION.lock().unwrap().take();
     let session = match session {
         Some(s) => s,
         None => return,
     };
 
-    log::info!(
-        "終了時セッション破棄を試行: session_id={}",
-        session.session_id
-    );
+    let auth = format!("Bearer {}", session.viewer_token);
+    let timeout = std::time::Duration::from_secs(3);
 
-    // タイムアウト 3 秒でブロッキング HTTP DELETE を実行
-    let url = format!("{}/api/sessions/{}", session.server_url, session.session_id);
+    // タイムアウト 3 秒でブロッキング HTTP を実行
+    if session.participant {
+        log::info!(
+            "終了時セッション退出を試行: session_id={}",
+            session.session_id
+        );
 
-    let result = ureq::delete(&url)
-        .set("Authorization", &format!("Bearer {}", session.viewer_token))
-        .timeout(std::time::Duration::from_secs(3))
-        .call();
+        let url = format!(
+            "{}/api/sessions/{}/disconnect",
+            session.server_url, session.session_id
+        );
+        let result = ureq::post(&url)
+            .set("Authorization", &auth)
+            .timeout(timeout)
+            .call();
 
-    match result {
-        Ok(_) => log::info!("セッション破棄完了: {}", session.session_id),
-        Err(e) => log::warn!("セッション破棄に失敗（無視）: {}", e),
+        match result {
+            Ok(_) => log::info!("セッション退出完了: {}", session.session_id),
+            Err(e) => log::warn!("セッション退出に失敗（無視）: {}", e),
+        }
+    } else {
+        log::info!(
+            "終了時セッション破棄を試行: session_id={}",
+            session.session_id
+        );
+
+        let url = format!("{}/api/sessions/{}", session.server_url, session.session_id);
+        let result = ureq::delete(&url)
+            .set("Authorization", &auth)
+            .timeout(timeout)
+            .call();
+
+        match result {
+            Ok(_) => log::info!("セッション破棄完了: {}", session.session_id),
+            Err(e) => log::warn!("セッション破棄に失敗（無視）: {}", e),
+        }
     }
 }
