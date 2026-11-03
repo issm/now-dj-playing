@@ -690,11 +690,11 @@ function TrackBody({ track, showComments, showTags }: { track: TrackPayload; sho
             {/* 左: アートワーク */}
             <div className="flex w-full shrink-0 items-center justify-center md:h-full md:w-1/2">
                 <img
-                    src={artworkSrc ?? "/default-artwork.png"}
+                    src={artworkSrc ?? `${import.meta.env.BASE_URL}default-artwork.png`}
                     alt="Artwork"
                     className="w-64 max-h-full rounded-lg object-contain shadow-lg md:w-full md:max-w-[85vh]"
                     onError={(e) => {
-                        e.currentTarget.src = "/default-artwork.png";
+                        e.currentTarget.src = `${import.meta.env.BASE_URL}default-artwork.png`;
                     }}
                 />
             </div>

@@ -52,6 +52,9 @@ export default defineConfig(({ mode }) => {
   }
 
   return {
+    // ブラウザ版は相対パスでビルドする（配信パスに依存しない。ndp-server のデプロイでは /v/ 配下）。
+    // Tauri 版は従来どおりルート（/）
+    base: isWeb ? "./" : "/",
     plugins: [react(), tailwindcss()],
     clearScreen: false,
     define: {

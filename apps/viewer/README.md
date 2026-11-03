@@ -54,7 +54,7 @@ yarn build:web    # dist-web/ に出力する（Tauri 用の dist/ とは別）
 yarn preview:web  # dist-web/ を確認する (http://localhost:4173)
 ```
 
-`dist-web/` は静的ファイルなので、任意の静的ホスティングで配信できる。ルートパス（`/`）での配信を前提とする。ndp-server は CORS を全オリジンに許可している。配信方法の取り決めは、この README では扱わない。
+`dist-web/` は静的ファイルで、相対パスでビルドされるため、任意のパスの下に置ける。ndp-server は CORS を全オリジンに許可している。ndp-server と同じホストの `/v/` で配信する手順は、[deploy/ndp-server/README.md](../../deploy/ndp-server/README.md) の「viewer-web のデプロイ」を参照（[ADR-0039](../../docs/adr/0039-20261103-viewer-web-deploy.md)）。
 
 ## セットアップ
 
