@@ -90,9 +90,9 @@ Tauri API への依存を、`Platform` インターフェースの裏側に閉�
   - `preview:web`: `vite preview --mode web`
 - `.gitignore` に `dist-web/` と `.env.web` を追加する
 
-### 6. 配信 (対象外)
+### 6. 配信
 
-本 ADR では、成果物 (`dist-web/`) を出力するところまでを扱う。配信方法 (ndp-server に同梱する、Caddy で別に配信するなど) は決めない。ルートパス (`/`) での配信を前提とし、README に手順を書く。
+本 ADR では、成果物 (`dist-web/`) を出力するところまでを扱う。配信方法は [ADR-0039](0039-20261103-viewer-web-deploy.md) で決めた (ndp-server と同じホストの `/v/` で配信する)。ビルドは、配信パスに依存しないよう、相対パスで出力する (当初の「ルートパス前提」は、これに置き換えた)。
 
 ## 理由
 
