@@ -383,10 +383,11 @@ pub struct Roles {
 #[derive(Debug, Serialize)]
 pub struct CreateSessionResponse {
     pub session_id: String,
-    /// publisher 用コード（過去互換。`roles.publisher.code` と同じ値）
+    /// DEPRECATED: `roles.publisher.code` を使うこと（同じ値）。過去互換のためだけに残している
     pub code: String,
     pub event_name: Option<String>,
-    /// owner の token（過去互換の名前。`roles.viewer` とは無関係）
+    /// DEPRECATED: 過去互換のためだけに残している名前。実体は owner の token で、`roles.viewer` とは無関係。
+    /// owner の token の新しい返し方は未定のため、現時点ではこのフィールドが唯一の取得手段
     pub viewer_token: String,
     pub roles: Roles,
 }
