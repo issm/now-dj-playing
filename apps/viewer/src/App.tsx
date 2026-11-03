@@ -778,17 +778,9 @@ function DjRosterHeader({
 
     // Create した viewer のみ、publisher 用 / viewer 用の認証コードを表示する
     const sessionCodesBadge = !showSessionEntry && sessionCodes ? (
-        <span className="flex items-baseline gap-4 font-mono text-base text-yellow-300/80">
-            <span>
-                <span className="mr-1 font-sans text-xs text-gray-500">publish</span>
-                {sessionCodes.publisher}
-            </span>
-            {sessionCodes.viewer && (
-                <span>
-                    <span className="mr-1 font-sans text-xs text-gray-500">view</span>
-                    {sessionCodes.viewer}
-                </span>
-            )}
+        <span className="flex select-none items-baseline gap-4 text-base text-yellow-300/80">
+            <CopyableCode label="publish" code={sessionCodes.publisher} />
+            {sessionCodes.viewer && <CopyableCode label="view" code={sessionCodes.viewer} />}
         </span>
     ) : null;
 
@@ -949,3 +941,47 @@ function GenericCommentView({ parsed, showTags }: { parsed: Extract<ParsedCommen
 }
 
 export default App;
+
+/**
+ * ラベル付きのセッションコード
+ *
+ * ラベルとコードはマウス選択できない。コードをクリックするとクリップボードにコピーする
+ */
+function CopyableCode({ label, code }: { label: string; code: string }) {
+    const [copied, setCopied] = useState(false);
+    const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    // アンマウント時にタイマーを破棄する
+    useEffect(() => {
+        return () => {
+            if (timerRef.current) clearTimeout(timerRef.current);
+        };
+    }, []);
+
+    const handleCopy = () => {
+        navigator.clipboard.writeText(code).then(
+            () => {
+                // コピーできたことを、一瞬の色の変化で知らせる
+                setCopied(true);
+                if (timerRef.current) clearTimeout(timerRef.current);
+                timerRef.current = setTimeout(() => setCopied(false), 1500);
+            },
+            (err) => console.warn("[clipboard] コピーに失敗:", err),
+        );
+    };
+
+    return (
+        <span className="select-none">
+            <span className="mr-1 text-xs text-gray-500">{label}</span>
+            <button
+                type="button"
+                onClick={handleCopy}
+                title="クリックでコピー"
+                className={`cursor-pointer select-none font-mono transition-colors ${copied ? "text-green-300" : "hover:text-yellow-200"
+                    }`}
+            >
+                {code}
+            </button>
+        </span>
+    );
+}
