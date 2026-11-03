@@ -1,16 +1,30 @@
 import type { AppConfig, BackgroundImageEntry, TrackPayload } from "../types";
 import type { DataSourceCallbacks, WebSession } from "../useDataSource";
 
+/** プラットフォームごとの機能の有無（画面側はこれを見て、表示やショートカットを切り替える） */
+export interface PlatformCapabilities {
+  /** セッションの作成（Create） */
+  createSession: boolean;
+  /** 設定ファイルの読み込み・再読み込み・書き戻し */
+  configFile: boolean;
+  /** モニタウィンドウ */
+  monitorWindow: boolean;
+  /** 背景画像 */
+  backgroundImage: boolean;
+}
+
 /**
- * Tauri API への依存を閉じ込めるインターフェース
+ * Tauri / ブラウザの違いを吸収するインターフェース
  *
  * Tauri API の呼び出しは `tauri.ts` に集約する。画面側（`App.tsx` など）は
  * Tauri API を直接呼ばず、この `Platform` を通す。
  *
- * 現時点の実装は Tauri 版（`tauri.ts`）のみ。ブラウザ対応（#77）では、
- * 同じインターフェースのブラウザ版を追加する。
+ * 実装は `tauri.ts`（デスクトップアプリ）と `browser.ts`（ブラウザ、Connect 専用）。
  */
 export interface Platform {
+  /** 機能の有無 */
+  readonly capabilities: PlatformCapabilities;
+
   /** 現在のウィンドウのラベル（`main` / `monitor`） */
   readonly windowLabel: string;
 
@@ -18,10 +32,10 @@ export interface Platform {
   getConfig(): Promise<AppConfig>;
   /** アプリ設定を再読み込みして返す */
   reloadConfig(): Promise<AppConfig>;
-  /** 設定値を永続化する（key / value は設定ファイルのキーと JSON 文字列） */
+  /** 設定値を永続化する（key / value は設定ファイルのキーと JSON 文字列。永続化しない環境では何もしない） */
   saveSetting(key: string, value: string): Promise<void>;
 
-  /** 接続中の web セッションを登録する（アプリ終了時の破棄 / 退出に使う） */
+  /** 接続中の web セッションを登録する（アプリ終了時やページ離脱時の破棄 / 退出に使う） */
   setWebSession(session: WebSession): Promise<void>;
   /** 登録した web セッションを解除する */
   clearWebSession(): Promise<void>;

@@ -11,6 +11,13 @@ import type { Platform } from "./types";
  */
 export function createTauriPlatform(): Platform {
   return {
+    capabilities: {
+      createSession: true,
+      configFile: true,
+      monitorWindow: true,
+      backgroundImage: true,
+    },
+
     windowLabel: getCurrentWebviewWindow().label,
 
     getConfig: () => invoke<AppConfig>("get_app_config"),
