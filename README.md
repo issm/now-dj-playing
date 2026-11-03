@@ -235,9 +235,12 @@ cargo run
 |---|---|---|---|
 | GET | `/health` | ヘルスチェック | なし |
 | POST | `/api/sessions/create` | セッション作成 (viewer 用) | なし |
-| POST | `/api/sessions/join` | セッション参加 (publisher 用) | なし |
+| POST | `/api/sessions/join` | セッション参加 (publisher 用) | なし (publish 用コード) |
+| POST | `/api/sessions/connect` | セッション参加 (閲覧専用の viewer 用) | なし (view 用コード) |
+| DELETE | `/api/sessions/{id}` | セッション破棄 (作成した viewer のみ) | Bearer トークン (owner) |
 | POST | `/api/sessions/{id}/publish` | 楽曲情報の送信 | Bearer トークン |
-| POST | `/api/sessions/{id}/leave` | セッション離脱 | Bearer トークン |
+| POST | `/api/sessions/{id}/leave` | セッション離脱 (publisher 用) | Bearer トークン |
+| POST | `/api/sessions/{id}/disconnect` | セッション離脱 (`connect` した viewer 用) | Bearer トークン |
 | GET | `/api/sessions/{id}/stream` | SSE ストリーム (viewer 用) | Bearer トークン |
 
 詳細は [apps/server/README.md](apps/server/README.md) を参照。

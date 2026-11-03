@@ -19,6 +19,8 @@ pub struct StreamQuery {
 }
 
 /// GET /api/sessions/{session_id}/stream
+///
+/// owner の token、または connect で発行された参加者用 token で購読できる
 pub async fn stream(
     State(store): State<Arc<SessionStore>>,
     Path(session_id): Path<String>,
@@ -60,6 +62,8 @@ pub async fn stream(
     }
 
     // broadcast チャネルを subscribe
+    // （スナップショットの取得より先に subscribe することで、取りこぼしを防ぐ。
+    //   その代わり、参加の瞬間と重なると publisher_joined が重複し得るが、viewer 側は冪等）
     let rx = store.subscribe(&session_id).ok_or_else(|| {
         (
             StatusCode::NOT_FOUND,
@@ -69,8 +73,24 @@ pub async fn stream(
         )
     })?;
 
-    // 最新の楽曲情報があれば初回イベントとして送信するためのデータ
-    let last_track = store.get_last_track(&session_id);
+    // 接続直後に送るスナップショット:
+    // 現在参加中の publisher 全員分の publisher_joined → 最新の楽曲情報
+    let snapshot: Vec<Event> = store
+        .get_publishers(&session_id)
+        .into_iter()
+        .map(|p| {
+            event_to_sse(SessionEvent::PublisherJoined {
+                publisher_id: p.id,
+                dj_name: p.dj_name,
+                dj_image: p.dj_image,
+            })
+        })
+        .chain(
+            store
+                .get_last_track(&session_id)
+                .map(|track| event_to_sse(SessionEvent::TrackChanged(track))),
+        )
+        .collect();
 
     // BroadcastStream に変換し、SSE イベントに変換
     let broadcast_stream = BroadcastStream::new(rx).filter_map(|result| match result {
@@ -78,16 +98,8 @@ pub async fn stream(
         Err(_) => None, // lagged (受信が遅れた) 場合はスキップ
     });
 
-    // 初回イベント + broadcast ストリームを結合
-    let initial_stream = tokio_stream::iter(
-        last_track
-            .map(|track| {
-                let event = SessionEvent::TrackChanged(track);
-                event_to_sse(event)
-            })
-            .into_iter()
-            .collect::<Vec<_>>(),
-    );
+    // スナップショット + broadcast ストリームを結合
+    let initial_stream = tokio_stream::iter(snapshot);
 
     let combined = initial_stream.chain(broadcast_stream);
 
@@ -99,17 +111,16 @@ pub async fn stream(
 
 /// SessionEvent を SSE Event に変換する
 fn event_to_sse(event: SessionEvent) -> Event {
-    match &event {
-        SessionEvent::TrackChanged(_) => Event::default()
-            .event("track_changed")
-            .data(serde_json::to_string(&event).unwrap_or_default()),
-        SessionEvent::PublisherJoined { .. } => Event::default()
-            .event("publisher_joined")
-            .data(serde_json::to_string(&event).unwrap_or_default()),
-        SessionEvent::PublisherLeft { .. } => Event::default()
-            .event("publisher_left")
-            .data(serde_json::to_string(&event).unwrap_or_default()),
-    }
+    let name = match &event {
+        SessionEvent::TrackChanged(_) => "track_changed",
+        SessionEvent::PublisherJoined { .. } => "publisher_joined",
+        SessionEvent::PublisherLeft { .. } => "publisher_left",
+        SessionEvent::SessionDestroyed => "session_destroyed",
+    };
+
+    Event::default()
+        .event(name)
+        .data(serde_json::to_string(&event).unwrap_or_default())
 }
 
 /// Authorization ヘッダから Bearer トークンを抽出する
