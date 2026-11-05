@@ -36,12 +36,12 @@ Tauri アプリ（publisher-gui、viewer）を macOS ユーザに配布する必
 - `.app` バンドルを zip 圧縮して配布
 - DMG も署名なしでは結局 quarantine 対象のため、zip で十分
 
-### リリースフロー (`bin/release-local.sh`)
+### リリースフロー (`scripts/release-local.sh`)
 
 全アプリを一括でビルド・署名・配置するスクリプトを用意:
 
 ```bash
-bin/release-local.sh <RELEASE_BASEDIR>
+scripts/release-local.sh <RELEASE_BASEDIR>
 ```
 
 処理内容:
@@ -59,8 +59,8 @@ bin/release-local.sh <RELEASE_BASEDIR>
 
 アプリごとにセットアップスクリプトを用意し、配布物に同梱する:
 
-- `bin/setup-publisher-gui.mac.sh` — publisher-gui 用
-- `bin/setup-viewer.mac.sh` — viewer 用
+- `scripts/setup-publisher-gui.mac.sh` — publisher-gui 用
+- `scripts/setup-viewer.mac.sh` — viewer 用
 
 いずれも quarantine 属性を除去するのみ:
 
@@ -95,7 +95,7 @@ echo "セットアップ完了"
 
 ## 影響
 
-- `bin/release-local.sh` — 全アプリのビルド + 署名 + 配置を一括実行
-- `bin/setup-publisher-gui.mac.sh` — publisher-gui 用セットアップスクリプト
-- `bin/setup-viewer.mac.sh` — viewer 用セットアップスクリプト
+- `scripts/release-local.sh` — 全アプリのビルド + 署名 + 配置を一括実行
+- `scripts/setup-publisher-gui.mac.sh` — publisher-gui 用セットアップスクリプト
+- `scripts/setup-viewer.mac.sh` — viewer 用セットアップスクリプト
 - アップデート配布時はユーザ側で再度セットアップスクリプトの実行が必要（案内に明記）
