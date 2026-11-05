@@ -51,6 +51,7 @@ now-dj-playing/
 │   ├─ publisher/       楽曲タグ抽出 CLI ツール (Rust)
 │   ├─ publisher-gui/   Publisher GUI アプリ (Tauri 2)
 │   └─ server/          中継サーバ (Rust, axum)
+├─ scripts/             リリース用スクリプト (release-local.sh ほか)
 ├─ deploy/
 │   └─ ndp-server/      デプロイスクリプト・設定 (Lightsail + Caddy + systemd)
 ├─ packages/
@@ -262,6 +263,28 @@ cargo run
 cd packages/watch-core
 cargo run --example watch_local -- ../../sandbox
 ```
+
+## リリースビルド (配布用)
+
+`scripts/release-local.sh` で、全アプリのビルド・署名・配置をまとめて実行する。配布方針は [ADR-0035](docs/adr/0035-20260726-app-distribution.md) を参照。
+
+```sh
+scripts/release-local.sh <RELEASE_BASEDIR>
+```
+
+`<RELEASE_BASEDIR>` 配下の各ディレクトリ (`server/`, `viewer/`, `publisher/`, `publisher-gui/`) にビルド成果物を配置する。これらのディレクトリは事前に作成しておくこと (`publisher-gui-darwin/` のみ自動作成される)。
+
+| 対象 | 成果物 | 署名 |
+|---|---|---|
+| server | `ndp-server` | 不要 |
+| viewer | `now-dj-playing.app` | ad-hoc (`codesign --force --deep --sign -`) |
+| publisher | `ndp-publish` | 不要 |
+| publisher-gui | `ndp-publish-gui.app` | ad-hoc |
+| publisher-gui (darwin) | `ndp-publish-gui.app` (Intel Mac / `x86_64-apple-darwin`) | ad-hoc |
+
+- `publisher-gui (darwin)` の成果物は `<RELEASE_BASEDIR>/publisher-gui-darwin/` に配置される。事前に `rustup target add x86_64-apple-darwin` が必要。
+- `.app` は ad-hoc 署名のため、受け取った側で隔離属性の除去が必要。`.app` と同じ場所に `scripts/setup-*.mac.sh` が同梱されるので、受け取った側で実行する。
+- 設定ファイル (`ndp-publish.config.json` など) は配置されない。配布先ごとに用意して、アプリと同じ場所に置く。
 
 ## データプロトコル (Local モード)
 
