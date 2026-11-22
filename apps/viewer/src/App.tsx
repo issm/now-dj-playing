@@ -777,7 +777,7 @@ function DjRosterHeader({
                 }}
                 disabled={busy}
                 aria-label="viewer 用コード"
-                className="w-28 rounded border border-gray-600 bg-gray-800 px-2 py-1 text-center font-mono text-base text-gray-200 outline-none focus:border-blue-500 disabled:opacity-50"
+                className="w-28 rounded border border-gray-600 bg-gray-800 px-2 py-1 text-center font-mono text-[16px] text-gray-200 outline-none focus:border-blue-500 disabled:opacity-50"
             />
             <button
                 onClick={onConnect}
@@ -800,7 +800,7 @@ function DjRosterHeader({
     // n == 0: ロスターが空（Create / Connect の入力 / 認証コードは中央表示）
     if (entries.length === 0) {
         return (
-            <header className="relative flex h-[100px] shrink-0 items-center justify-center gap-3 px-8">
+            <header className="relative flex h-[6.25rem] shrink-0 items-center justify-center gap-3 px-8">
                 {sessionEntry}
                 {sessionCodesBadge}
             </header>
@@ -809,7 +809,7 @@ function DjRosterHeader({
 
     // n >= 1: 横並び表示 + 現在の DJ をハイライト + 認証コードは右端
     return (
-        <header className="relative flex h-[100px] shrink-0 flex-wrap items-center justify-center gap-x-8 gap-y-1 px-8">
+        <header className="relative flex h-[6.25rem] shrink-0 flex-wrap items-center justify-center gap-x-8 gap-y-1 px-8">
             {entries.length === 1 ? (
                 <>
                     {(() => {
@@ -820,7 +820,7 @@ function DjRosterHeader({
                             <img
                                 src={imgSrc}
                                 alt="DJ Logo"
-                                className="h-full max-h-[80px] w-auto object-contain"
+                                className="h-full max-h-[5rem] w-auto object-contain"
                             />
                         ) : null;
                     })()}
@@ -846,7 +846,7 @@ function DjRosterHeader({
                                 <img
                                     src={logoSrc.startsWith("data:") ? logoSrc : (resolveImageSrc(logoSrc, "") ?? "")}
                                     alt="DJ Logo"
-                                    className="h-full max-h-[60px] w-auto object-contain"
+                                    className="h-full max-h-[3.75rem] w-auto object-contain"
                                 />
                             ) : (
                                 info.djName

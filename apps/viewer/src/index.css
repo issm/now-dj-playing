@@ -1,5 +1,12 @@
 @import "tailwindcss";
 
+/* モバイル (md 未満) は rem の基準を 85% にして、全体を縮小する (#88) */
+@media (max-width: 47.9988rem) {
+  html {
+    font-size: 85%;
+  }
+}
+
 @theme {
   --animate-slide-down: slide-down 0.3s ease-out;
   --animate-slide-up: slide-up 0.3s ease-in forwards;
