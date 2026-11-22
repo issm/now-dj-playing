@@ -2,12 +2,12 @@
 
 /*
  * wide: デスクトップ相当のレイアウト (アートワークが左、曲情報が右) にする条件 (#88)
- * - 幅 md (48rem) 以上
+ * - 横向きで、幅 md (48rem) 以上 (タブレットの縦画面は、スマホの縦画面と同じ縦積みにする)
  * - または、スマホの横画面 (横向きで高さ 30rem 以下)
  */
 @custom-variant wide {
 
-  @media (min-width: 48rem),
+  @media (orientation: landscape) and (min-width: 48rem),
   (orientation: landscape) and (max-height: 30rem) {
     @slot;
   }
@@ -20,9 +20,16 @@
   }
 }
 
-/* desk: デスクトップ相当の文字サイズにする条件。スマホの横画面は縦画面と同じ文字サイズにする */
+/* desk: デスクトップ相当の文字サイズにする条件。縦画面とスマホの横画面は、スマホの縦画面と同じ文字サイズにする */
 @custom-variant desk {
-  @media (min-width: 48rem) and (min-height: 30.0625rem) {
+  @media (orientation: landscape) and (min-width: 48rem) and (min-height: 30.0625rem) {
+    @slot;
+  }
+}
+
+/* tablet-portrait: タブレットの縦画面 (縦向きで幅 48rem 以上) だけ */
+@custom-variant tablet-portrait {
+  @media (orientation: portrait) and (min-width: 48rem) {
     @slot;
   }
 }

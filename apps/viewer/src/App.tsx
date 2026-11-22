@@ -692,7 +692,7 @@ function TrackBody({ track, showComments, showTags }: { track: TrackPayload; sho
                 <img
                     src={artworkSrc ?? `${import.meta.env.BASE_URL}default-artwork.png`}
                     alt="Artwork"
-                    className="w-64 max-h-full rounded-lg object-contain shadow-lg wide:aspect-square wide:h-auto wide:max-h-none wide:w-[min(100cqw,100cqh,85dvh)]"
+                    className="w-64 max-h-full tablet-portrait:w-[min(70vw,50dvh)] rounded-lg object-contain shadow-lg wide:aspect-square wide:h-auto wide:max-h-none wide:w-[min(100cqw,100cqh,85dvh)]"
                     onError={(e) => {
                         e.currentTarget.src = `${import.meta.env.BASE_URL}default-artwork.png`;
                     }}
