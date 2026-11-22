@@ -1,10 +1,44 @@
 @import "tailwindcss";
 
-/* モバイル (md 未満) は rem の基準を 85% にして、全体を縮小する (#88) */
-@media (max-width: 47.9988rem) {
+/*
+ * wide: デスクトップ相当のレイアウト (アートワークが左、曲情報が右) にする条件 (#88)
+ * - 幅 md (48rem) 以上
+ * - または、スマホの横画面 (横向きで高さ 30rem 以下)
+ */
+@custom-variant wide {
+
+  @media (min-width: 48rem),
+  (orientation: landscape) and (max-height: 30rem) {
+    @slot;
+  }
+}
+
+/* phone-landscape: スマホの横画面だけ (wide より後に定義して、競合時に優先させる) */
+@custom-variant phone-landscape {
+  @media (orientation: landscape) and (max-height: 30rem) {
+    @slot;
+  }
+}
+
+/* desk: デスクトップ相当の文字サイズにする条件。スマホの横画面は縦画面と同じ文字サイズにする */
+@custom-variant desk {
+  @media (min-width: 48rem) and (min-height: 30.0625rem) {
+    @slot;
+  }
+}
+
+/* モバイル (md 未満、およびスマホの横画面) は rem の基準を 85% にして、全体を縮小する (#88) */
+@media (max-width: 47.9988rem),
+(orientation: landscape) and (max-height: 30rem) {
   html {
     font-size: 85%;
   }
+}
+
+/* ノッチ側のセーフエリアなど、レイアウトの外側が白く見えないようにする (#88) */
+html,
+body {
+  background-color: #000;
 }
 
 @theme {

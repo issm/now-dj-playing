@@ -539,7 +539,7 @@ function App() {
                                         }
                                     }}
                                     autoFocus
-                                    className="w-96 rounded border border-gray-600 bg-gray-800 px-2 py-0.5 text-sm text-gray-200 outline-none focus:border-blue-500 md:text-base"
+                                    className="w-96 rounded border border-gray-600 bg-gray-800 px-2 py-0.5 text-sm text-gray-200 outline-none focus:border-blue-500 desk:text-base"
                                 />
                                 <span className="inline-flex gap-3">
                                     <button
@@ -572,7 +572,7 @@ function App() {
                                     setEditingEventNameValue(eventName ?? "");
                                     setEditingEventName(true);
                                 }}
-                                className="cursor-pointer text-sm text-gray-400 hover:text-gray-200 md:text-base"
+                                className="cursor-pointer text-sm text-gray-400 hover:text-gray-200 desk:text-base"
                             >
                                 {eventName}
                             </span>
@@ -686,13 +686,13 @@ function TrackBody({ track, showComments, showTags }: { track: TrackPayload; sho
     const artworkSrc = resolveImageSrc(track.artworkPath, track.updatedAt);
 
     return (
-        <main className="flex min-h-0 h-full w-full flex-1 flex-col items-center justify-center gap-8 px-8 pb-8 md:flex-row md:gap-12">
+        <main className="flex min-h-0 h-full w-full flex-1 flex-col items-center justify-center gap-8 px-8 pb-8 wide:flex-row wide:gap-12">
             {/* 左: アートワーク */}
-            <div className="flex w-full shrink-0 items-center justify-center md:h-full md:w-1/2">
+            <div className="flex w-full shrink-0 items-center justify-center wide:h-full wide:w-1/2 wide:[container-type:size] phone-landscape:w-2/5">
                 <img
                     src={artworkSrc ?? `${import.meta.env.BASE_URL}default-artwork.png`}
                     alt="Artwork"
-                    className="w-64 max-h-full rounded-lg object-contain shadow-lg md:w-full md:max-w-[85vh]"
+                    className="w-64 max-h-full rounded-lg object-contain shadow-lg wide:aspect-square wide:h-auto wide:max-h-none wide:w-[min(100cqw,100cqh,85dvh)]"
                     onError={(e) => {
                         e.currentTarget.src = `${import.meta.env.BASE_URL}default-artwork.png`;
                     }}
@@ -700,12 +700,12 @@ function TrackBody({ track, showComments, showTags }: { track: TrackPayload; sho
             </div>
 
             {/* 右: 楽曲情報 */}
-            <div className="flex w-full flex-col items-center justify-center gap-4 md:h-full md:w-1/2 md:items-start">
-                <div className="text-center md:text-left">
-                    <h2 className="text-2xl font-bold md:text-4xl">{track.title}</h2>
-                    <p className="mt-4 text-lg text-gray-300 md:text-2xl">{track.artist}</p>
+            <div className="flex w-full flex-col items-center justify-center gap-4 wide:h-full wide:w-1/2 wide:items-start phone-landscape:w-3/5">
+                <div className="text-center wide:text-left">
+                    <h2 className="text-2xl font-bold desk:text-4xl">{track.title}</h2>
+                    <p className="mt-4 text-lg text-gray-300 desk:text-2xl">{track.artist}</p>
                     {track.album && (
-                        <p className="mt-4 text-base text-gray-500 md:text-lg">{track.album}</p>
+                        <p className="mt-4 text-base text-gray-500 desk:text-lg">{track.album}</p>
                     )}
                 </div>
                 {showComments && track.comment && (
@@ -825,7 +825,7 @@ function DjRosterHeader({
                         ) : null;
                     })()}
                     {!(entries[0]![1].djImage ?? djLogoSrc) && (
-                        <span className="text-xl font-semibold text-gray-300 md:text-3xl">
+                        <span className="text-xl font-semibold text-gray-300 desk:text-3xl">
                             {entries[0]![1].djName}
                         </span>
                     )}
@@ -837,7 +837,7 @@ function DjRosterHeader({
                     return (
                         <span
                             key={id}
-                            className={`flex items-center gap-2 px-2 text-xl font-semibold md:text-3xl ${isCurrent
+                            className={`flex items-center gap-2 px-2 text-xl font-semibold desk:text-3xl ${isCurrent
                                 ? "border-b-4 border-yellow-500 text-white"
                                 : "border-b-4 border-transparent text-gray-500"
                                 }`}
@@ -870,7 +870,7 @@ function CommentDisplay({ raw, showTags }: { raw: string; showTags: boolean }) {
 
     if (!parsed) {
         // 構造化できないコメントはそのまま表示
-        return <p className="mt-8 text-base text-gray-400 md:text-lg">{raw}</p>;
+        return <p className="mt-8 text-base text-gray-400 desk:text-lg">{raw}</p>;
     }
 
     return (
@@ -888,10 +888,10 @@ function AnisonCommentView({ parsed, showTags }: { parsed: Extract<ParsedComment
     return (
         <>
             {parsed.source && (
-                <p className="text-base text-gray-300 md:text-lg">{parsed.source}</p>
+                <p className="text-base text-gray-300 desk:text-lg">{parsed.source}</p>
             )}
             {parsed.category && (
-                <p className="text-base text-gray-500 md:text-lg">{parsed.category}</p>
+                <p className="text-base text-gray-500 desk:text-lg">{parsed.category}</p>
             )}
             {showTags && (
                 <div className="flex flex-wrap gap-2">
@@ -924,7 +924,7 @@ function GenericCommentView({ parsed, showTags }: { parsed: Extract<ParsedCommen
     return (
         <>
             {parsed.source && (
-                <p className="text-base text-gray-300 md:text-lg">{parsed.source}</p>
+                <p className="text-base text-gray-300 desk:text-lg">{parsed.source}</p>
             )}
             {showTags && (
                 <div className="flex flex-wrap gap-2">
