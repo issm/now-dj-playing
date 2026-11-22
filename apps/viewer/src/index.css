@@ -1,5 +1,53 @@
 @import "tailwindcss";
 
+/*
+ * wide: デスクトップ相当のレイアウト (アートワークが左、曲情報が右) にする条件 (#88)
+ * - 横向きで、幅 md (48rem) 以上 (タブレットの縦画面は、スマホの縦画面と同じ縦積みにする)
+ * - または、スマホの横画面 (横向きで高さ 30rem 以下)
+ */
+@custom-variant wide {
+
+  @media (orientation: landscape) and (min-width: 48rem),
+  (orientation: landscape) and (max-height: 30rem) {
+    @slot;
+  }
+}
+
+/* phone-landscape: スマホの横画面だけ (wide より後に定義して、競合時に優先させる) */
+@custom-variant phone-landscape {
+  @media (orientation: landscape) and (max-height: 30rem) {
+    @slot;
+  }
+}
+
+/* desk: デスクトップ相当の文字サイズにする条件。縦画面とスマホの横画面は、スマホの縦画面と同じ文字サイズにする */
+@custom-variant desk {
+  @media (orientation: landscape) and (min-width: 48rem) and (min-height: 30.0625rem) {
+    @slot;
+  }
+}
+
+/* tablet-portrait: タブレットの縦画面 (縦向きで幅 48rem 以上) だけ */
+@custom-variant tablet-portrait {
+  @media (orientation: portrait) and (min-width: 48rem) {
+    @slot;
+  }
+}
+
+/* モバイル (md 未満、およびスマホの横画面) は rem の基準を 85% にして、全体を縮小する (#88) */
+@media (max-width: 47.9988rem),
+(orientation: landscape) and (max-height: 30rem) {
+  html {
+    font-size: 85%;
+  }
+}
+
+/* ノッチ側のセーフエリアなど、レイアウトの外側が白く見えないようにする (#88) */
+html,
+body {
+  background-color: #000;
+}
+
 @theme {
   --animate-slide-down: slide-down 0.3s ease-out;
   --animate-slide-up: slide-up 0.3s ease-in forwards;
