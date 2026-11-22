@@ -474,7 +474,7 @@ function App() {
     }
 
     return (
-        <div className="relative flex h-screen flex-col items-center justify-center overflow-hidden bg-black text-white">
+        <div className="relative flex h-dvh flex-col items-center justify-center overflow-hidden bg-black text-white">
             {/* 背景画像レイヤー */}
             {backgroundImageAbsolutePath && (
                 <div
